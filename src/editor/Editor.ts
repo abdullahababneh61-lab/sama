@@ -93,6 +93,7 @@ import { CropTool } from './tools/CropTool';
 import { PerspectiveCropTool } from './tools/PerspectiveCropTool';
 import { EyedropperTool } from './tools/EyedropperTool';
 import { ColorSamplerTool } from './tools/ColorSamplerTool';
+import { RulerTool } from './tools/RulerTool';
 import { correctedSize, isValidQuad, type XY } from './perspective';
 import { perspectiveWarpLayers } from './perspectiveCrop';
 import { ClippingGroup } from '@erase2d/fabric';
@@ -208,6 +209,7 @@ export class Editor {
       perspectiveCrop: new PerspectiveCropTool(this),
       eyedropper: new EyedropperTool(this),
       colorSampler: new ColorSamplerTool(this),
+      ruler: new RulerTool(this),
     };
 
     this.bindCanvasEvents();
@@ -2187,6 +2189,7 @@ export class Editor {
       c: 'crop',
       i: 'eyedropper',
       o: 'colorSampler',
+      r: 'ruler',
     };
     // Shift+C: Perspective Crop (plain C is the regular Crop tool).
     if (lower === 'c' && e.shiftKey && !e.altKey) {

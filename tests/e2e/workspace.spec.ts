@@ -532,3 +532,41 @@ test.describe('color sampler tool', () => {
     expectNoErrors(errors);
   });
 });
+
+test.describe('ruler tool', () => {
+  test('R measures length and angle; Shift snaps to 45°; ends are draggable; Escape clears', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    const m = () => page.evaluate(() => (window as any).samaEditor.getTool('ruler').measurement);
+    await page.keyboard.press('r');
+    expect((await workspaceState(page)).tool).toBe('ruler');
+
+    await drag(page, [100, 500], [400, 100]); // dx 300, dy -400 → 500 px at 53.13°
+    let r = await m();
+    expect(r.length).toBeGreaterThan(495);
+    expect(r.length).toBeLessThan(505);
+    expect(r.angle).toBeCloseTo(53.13, 0);
+
+    // Shift snaps to the nearest 45° step.
+    await page.keyboard.down('Shift');
+    await drag(page, [100, 800], [500, 720]);
+    await page.keyboard.up('Shift');
+    r = await m();
+    expect(Math.abs(r.angle)).toBeLessThan(0.01);
+
+    // Drag the end point: length updates, start stays.
+    const startBefore = r.start;
+    await drag(page, [r.end.x, r.end.y], [r.end.x, r.end.y - 300]);
+    r = await m();
+    expect(r.start).toEqual(startBefore);
+    expect(r.angle).toBeGreaterThan(30);
+
+    // Not a layer, not an undo step.
+    const s = await workspaceState(page);
+    expect(s.layers).toHaveLength(0);
+    expect(s.history.labels).toEqual(['New document']);
+
+    await page.keyboard.press('Escape');
+    expect(await m()).toBeNull();
+    expectNoErrors(errors);
+  });
+});

@@ -24,6 +24,7 @@ export const en = {
   'tool.perspectiveCrop': 'Perspective Crop',
   'tool.eyedropper': 'Eyedropper',
   'tool.colorSampler': 'Color Sampler',
+  'tool.ruler': 'Ruler',
   'tool.image': 'Import image',
 
   // Tool hints (options bar)
@@ -40,6 +41,7 @@ export const en = {
   'hint.line': 'Drag to draw · Shift = 45° angles',
   'hint.polygon': 'Drag to draw · Shift = regular · Alt = from centre',
   'hint.crop': 'Drag to define crop area · Enter to confirm · Escape to cancel',
+  'hint.ruler': 'Drag to measure distance and angle · Shift to snap to 45° · Escape to clear',
   'hint.colorSampler': 'Click to place a color sample point · Alt+Click a point to remove it · up to 4 points',
   'hint.eyedropper': 'Click to pick a color · Alt+Click to pick stroke color · Escape to cancel',
   'hint.perspectiveCrop': 'Drag corners to define perspective · Enter to confirm · Escape to cancel',

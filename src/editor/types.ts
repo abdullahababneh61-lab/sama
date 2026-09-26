@@ -23,7 +23,8 @@ export type ToolId =
   | 'crop'
   | 'perspectiveCrop'
   | 'eyedropper'
-  | 'colorSampler';
+  | 'colorSampler'
+  | 'ruler';
 
 /** Tools that create shapes by dragging on the canvas. */
 export type ShapeToolId = Extract<ToolId, 'rect' | 'ellipse' | 'line' | 'polygon'>;
