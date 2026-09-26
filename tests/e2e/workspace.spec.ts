@@ -271,8 +271,20 @@ test.describe('export', () => {
     expect((await workspaceState(page)).layers).toHaveLength(0);
     await page.evaluate((doc) => (window as any).samaEditor.loadDocument(doc), result.doc);
     const again = await page.evaluate(() => (window as any).samaEditor.getDocument());
+    // The exact scene must come back identical…
     expect(again.fabric.objects).toEqual(result.doc.fabric.objects);
-    expect(again.layers).toEqual(result.doc.layers);
+    // …and the derived, rounded layer description may differ only by rounding
+    // (e.g. 599.48 vs 599.49 when a value sits on a rounding boundary).
+    const close = (a: unknown, b: unknown): boolean =>
+      typeof a === 'number' && typeof b === 'number'
+        ? Math.abs(a - b) <= 0.011
+        : Array.isArray(a) && Array.isArray(b)
+          ? a.length === b.length && a.every((v, i) => close(v, b[i]))
+          : a && b && typeof a === 'object' && typeof b === 'object'
+            ? Object.keys(a).length === Object.keys(b).length &&
+              Object.keys(a).every((k) => close((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]))
+            : a === b;
+    expect(close(again.layers, result.doc.layers)).toBe(true);
     expectNoErrors(errors);
   });
 
@@ -669,6 +681,70 @@ test.describe('spot healing brush', () => {
     await page.keyboard.press('j');
     await drag(page, [150, 150], [200, 200]);
     expect(await page.evaluate(() => (window as any).samaEditor.store.getState().toast?.message)).toBe('toast.spotHealNoImage');
+    expectNoErrors(errors);
+  });
+});
+
+test.describe('healing brush', () => {
+  test('Shift+J; needs an Alt+click source; heals with the destination tone; Escape clears the source', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    const png = await page.evaluate(() => {
+      const c = document.createElement('canvas');
+      c.width = 400;
+      c.height = 300;
+      const x = c.getContext('2d')!;
+      const g = x.createLinearGradient(0, 0, 400, 0);
+      g.addColorStop(0, '#5a3a28');
+      g.addColorStop(1, '#f0c8a0');
+      x.fillStyle = g;
+      x.fillRect(0, 0, 400, 300);
+      x.fillStyle = '#200000';
+      x.beginPath();
+      x.arc(320, 150, 12, 0, Math.PI * 2);
+      x.fill();
+      return c.toDataURL('image/png').split(',')[1];
+    });
+    await page.setInputFiles('[data-testid=image-input]', { name: 'face.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
+    await page.waitForTimeout(500);
+    const pix = (x: number, y: number) =>
+      page.evaluate(
+        ([x, y]) => {
+          const img = (window as any).samaEditor.canvas.getObjects()[0];
+          const el = img.getElement();
+          const c = document.createElement('canvas');
+          c.width = el.naturalWidth;
+          c.height = el.naturalHeight;
+          const k = c.getContext('2d', { willReadFrequently: true })!;
+          k.drawImage(el, 0, 0);
+          return [...k.getImageData(x, y, 1, 1).data];
+        },
+        [x, y],
+      );
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Shift+J');
+    expect((await workspaceState(page)).tool).toBe('healingBrush');
+    const tool = () => page.evaluate(() => (window as any).samaEditor.getTool('healingBrush').sourcePoint);
+
+    // Image (400×300) centred on the artboard: image pixel (px,py) = artboard (340+px, 390+py).
+    await drag(page, [650, 540], [670, 540]);
+    expect(await page.evaluate(() => (window as any).samaEditor.store.getState().toast?.message)).toBe('toast.healingNeedsSource');
+    expect((await workspaceState(page)).history.labels.at(-1)).toBe('Import image');
+
+    await clickAt(page, 400, 540, ['Alt']); // source on the dark side
+    expect(await tool()).not.toBeNull();
+    await page.evaluate(() => (window as any).samaEditor.updateToolOptions('spotHealingBrush', { size: 40 }));
+    await drag(page, [650, 540], [672, 540], 5);
+    await expect.poll(async () => (await workspaceState(page)).history.labels.at(-1)).toBe('Healing brush');
+    const healed = await pix(320, 150);
+    // Bright like its surroundings — not the dark source tone, not the blemish.
+    expect(healed[0]).toBeGreaterThan(180);
+    expect(healed[1]).toBeGreaterThan(140);
+
+    await page.keyboard.press('Escape');
+    expect(await tool()).toBeNull();
+    await page.keyboard.press('Control+z');
+    await settle(page);
+    expect(await pix(320, 150)).toEqual([32, 0, 0, 255]);
     expectNoErrors(errors);
   });
 });

@@ -50,6 +50,7 @@ export function OptionsBar() {
       case 'count':
         return <CountOptions />;
       case 'spotHealingBrush':
+      case 'healingBrush':
         return <SpotHealOptions />;
     }
   })();

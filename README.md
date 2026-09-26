@@ -63,6 +63,7 @@ existing Chromium: `CHROMIUM_PATH=/path/to/chrome npm run test:e2e`.)
 | Ruler | `R` | Drag to measure: a label shows the length (px) and angle from horizontal (counter-clockwise positive, as in Photoshop). Shift snaps to 45°; drag either end to adjust; Esc clears. The line is an on-screen measurement, not a layer. |
 | Count | `N` | Click each item to count it: numbered markers (1, 2, 3…) with the running total in the options bar. Drag a marker to move it; Alt+click removes it and renumbers the rest; Esc hides the markers (they're kept); Clear all removes them. |
 | Spot Healing Brush | `J` | Paint over a blemish in a photo; on release the area is rebuilt from the pixels around it with a soft edge. Size in the options bar, `[` / `]` to resize. Works on image layers only (see limitations). Esc cancels the stroke. |
+| Healing Brush | `Shift+J` | Alt+click an image to set a source point, then paint over the area to fix: texture is copied from the source (offset as you move) and blended into the colour and lighting around the destination. Live preview while painting; shares the Spot Healing Brush's size. Esc clears the source. Image layers only. |
 | Hand | `H` or hold `Space` | Pan. Scroll also pans; `Ctrl`/`⌘`+scroll zooms. |
 | Zoom | `Z` | Click zooms in, Alt+click zooms out. |
 | Image import | toolbar button, `Ctrl+Shift+I`, drag-and-drop, paste | PNG/JPEG/WebP/GIF/SVG (SVG is imported as an image). |
@@ -105,6 +106,7 @@ with an Arabic keyboard layout.)
 | | `O` | Color Sampler |
 | | `N` | Count |
 | | `J` | Spot Healing Brush |
+| | `Shift+J` | Healing Brush |
 | | `R` | Ruler (`Ctrl+R` still toggles the rulers along the canvas edges) |
 | | `U` | Cycle shape tools (rectangle → ellipse → line → polygon) |
 | | hold `Space` | Temporary hand tool |
@@ -183,7 +185,7 @@ Flagged deliberately rather than left silent:
   kept, and the JSON export records each image's original type and text
   (`image.perspectiveCorrected`) — but those layers are no longer editable as
   text or vectors. Undo restores the originals. Guides are cleared.
-- **Spot Healing works on image layers only.** Shapes, text, pen paths and
+- **Spot Healing and the Healing Brush work on image layers only.** Shapes, text, pen paths and
   brush strokes are vectors with no pixels to repair (rasterize-to-image is a
   possible follow-up). The repair is a smooth fill from the surrounding
   colours plus matching grain — good for spots, dust and small objects on

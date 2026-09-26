@@ -27,6 +27,7 @@ export const en = {
   'tool.ruler': 'Ruler',
   'tool.count': 'Count',
   'tool.spotHealingBrush': 'Spot Healing Brush',
+  'tool.healingBrush': 'Healing Brush',
   'tool.image': 'Import image',
 
   // Tool hints (options bar)
@@ -43,6 +44,7 @@ export const en = {
   'hint.line': 'Drag to draw · Shift = 45° angles',
   'hint.polygon': 'Drag to draw · Shift = regular · Alt = from centre',
   'hint.crop': 'Drag to define crop area · Enter to confirm · Escape to cancel',
+  'hint.healingBrush': 'Alt+Click to set a source point, then paint to heal · Escape to reset',
   'hint.spotHealingBrush': 'Paint over an area to remove it and blend with surrounding content',
   'hint.count': 'Click to add a count marker · Alt+Click a marker to remove it',
   'hint.ruler': 'Drag to measure distance and angle · Shift to snap to 45° · Escape to clear',
@@ -264,6 +266,11 @@ export const en = {
   'colorSampler.none': 'No colour here',
   'colorSampler.remove': 'Remove sample point {n}',
   'colorSampler.clear': 'Clear all',
+  'toast.healingNeedsSource': 'Alt+Click to set a source point first, then paint to heal.',
+  'toast.healingSourceNoImage': 'Alt+Click on an image layer to use it as the source.',
+  'toast.healingNoImage': 'The Healing Brush works on image layers. Paint over an imported photo.',
+  'toast.healingSourceOutside': 'The source area falls outside the image. Set a source point closer to the area you paint.',
+  'history.Healing brush': 'Healing brush',
   'toast.spotHealNoImage': 'Spot healing works on image layers. Paint over an imported photo (shapes, text and brush strokes are vectors).',
   'toast.spotHealTooLarge': 'That area is too large to repair from its surroundings. Try a smaller stroke.',
   'toast.spotHealFailed': 'The area could not be repaired.',

@@ -96,6 +96,7 @@ import { ColorSamplerTool } from './tools/ColorSamplerTool';
 import { RulerTool } from './tools/RulerTool';
 import { CountTool } from './tools/CountTool';
 import { SpotHealingBrushTool } from './tools/SpotHealingBrushTool';
+import { HealingBrushTool } from './tools/HealingBrushTool';
 import { correctedSize, isValidQuad, type XY } from './perspective';
 import { perspectiveWarpLayers } from './perspectiveCrop';
 import { ClippingGroup } from '@erase2d/fabric';
@@ -214,6 +215,7 @@ export class Editor {
       ruler: new RulerTool(this),
       count: new CountTool(this),
       spotHealingBrush: new SpotHealingBrushTool(this),
+      healingBrush: new HealingBrushTool(this),
     };
 
     this.bindCanvasEvents();
@@ -2197,6 +2199,11 @@ export class Editor {
       n: 'count',
       j: 'spotHealingBrush',
     };
+    // Shift+J: Healing Brush (plain J is the Spot Healing Brush, as in Photoshop).
+    if (lower === 'j' && e.shiftKey && !e.altKey) {
+      this.setTool('healingBrush');
+      return true;
+    }
     // Shift+C: Perspective Crop (plain C is the regular Crop tool).
     if (lower === 'c' && e.shiftKey && !e.altKey) {
       this.setTool('perspectiveCrop');
@@ -2236,7 +2243,11 @@ export class Editor {
   /** `[` / `]` resize the brush, eraser or healing brush (Photoshop convention). */
   adjustBrushSize(direction: 1 | -1) {
     const tool =
-      this.activeToolId === 'eraser' ? 'eraser' : this.activeToolId === 'spotHealingBrush' ? 'spotHealingBrush' : 'brush';
+      this.activeToolId === 'eraser'
+        ? 'eraser'
+        : this.activeToolId === 'spotHealingBrush' || this.activeToolId === 'healingBrush'
+          ? 'spotHealingBrush' // both healing brushes share one size
+          : 'brush';
     const size = this.toolOptions[tool].size;
     const step = size < 10 ? 1 : size < 50 ? 5 : size < 100 ? 10 : 25;
     this.updateToolOptions(tool, { size: Math.max(1, Math.min(500, size + direction * step)) });
