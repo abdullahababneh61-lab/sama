@@ -23,16 +23,19 @@ export function Popover({ anchor, open, onClose, children, placement = 'bottom-s
     if (!open || !anchor.current || !ref.current) return;
     const a = anchor.current.getBoundingClientRect();
     const p = ref.current.getBoundingClientRect();
+    // Side placements follow the reading direction (panels are mirrored in RTL).
+    const rtl = getComputedStyle(anchor.current).direction === 'rtl';
+    const side = rtl && placement === 'left-start' ? 'right-start' : rtl && placement === 'right-start' ? 'left-start' : placement;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     let left = a.left;
     let top = a.bottom + 6;
-    if (placement === 'bottom-end') left = a.right - p.width;
-    if (placement === 'left-start') {
+    if (side === 'bottom-end') left = a.right - p.width;
+    if (side === 'left-start') {
       left = a.left - p.width - 8;
       top = a.top;
     }
-    if (placement === 'right-start') {
+    if (side === 'right-start') {
       left = a.right + 8;
       top = a.top;
     }

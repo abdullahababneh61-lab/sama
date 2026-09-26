@@ -47,7 +47,10 @@ export class SelectTool extends Tool {
       if (ev?.altKey && !this.altCopyDone) {
         this.altCopyDone = true;
         const objs = c.getActiveObjects().filter((o) => !isEffectivelyLocked(o));
-        if (objs.length) void this.editor.leaveCopyBehind(objs);
+        if (objs.length) {
+          this.editor.nextTransformLabel = 'Duplicate';
+          void this.editor.leaveCopyBehind(objs);
+        }
       }
     });
     this.offDown = c.on('mouse:down:before', () => {

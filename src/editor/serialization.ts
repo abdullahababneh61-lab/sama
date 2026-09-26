@@ -10,7 +10,7 @@
  *    small `analysis` block. This is the part meant for a later AI evaluation
  *    step: it can be read without knowing anything about Fabric.
  */
-import { FabricImage, Group, IText, Path, Polygon, Rect, StaticCanvas, util } from 'fabric';
+import { FabricImage, Group, IText, Path, Point, Polygon, Rect, StaticCanvas, util } from 'fabric';
 import type { Canvas, FabricObject } from 'fabric';
 import { ClippingGroup } from '@erase2d/fabric';
 import type { SerializedAsset } from './assets';
@@ -81,7 +81,13 @@ export interface SemanticLayer {
   };
   path?: { d: string; closed: boolean; anchorCount: number };
   image?: { assetId?: string; fileName?: string; naturalWidth: number; naturalHeight: number };
-  paint?: { strokeCount: number; colors: string[]; brushSizes: number[] };
+  paint?: {
+    strokeCount: number;
+    colors: string[];
+    brushSizes: number[];
+    /** Every stroke's centre line in artboard coordinates, in painting order. */
+    strokes: { d: string; color: string | null; size: number; opacity: number; hardness: number; erased: boolean }[];
+  };
   children?: SemanticLayer[];
 }
 
@@ -154,8 +160,26 @@ function isErased(obj: FabricObject): boolean {
   return false;
 }
 
-function pathToString(path: Path): string {
-  return util.joinPath(path.path);
+/**
+ * Path data converted to artboard coordinates (includes the object's
+ * position, scale, rotation and any parent group transform), so consumers
+ * don't need to know about Fabric's internal coordinate spaces.
+ */
+function pathInArtboard(path: Path, digits = 2): string {
+  const m = path.calcTransformMatrix();
+  const off = path.pathOffset;
+  const r = (n: number) => round(n, digits);
+  return path.path
+    .map((cmd) => {
+      const [type, ...nums] = cmd as unknown as [string, ...number[]];
+      const out: number[] = [];
+      for (let i = 0; i + 1 < nums.length; i += 2) {
+        const p = new Point(nums[i] - off.x, nums[i + 1] - off.y).transform(m);
+        out.push(r(p.x), r(p.y));
+      }
+      return [type, ...out].join(' ');
+    })
+    .join(' ');
 }
 
 export function describeLayer(obj: FabricObject, doc: DocumentSettings): SemanticLayer {
@@ -212,14 +236,16 @@ export function describeLayer(obj: FabricObject, doc: DocumentSettings): Semanti
   if (obj instanceof Path && !(obj instanceof BrushStroke)) {
     const commands = obj.path;
     layer.path = {
-      d: pathToString(obj),
+      d: pathInArtboard(obj),
       closed: commands.some((c) => c[0] === 'Z'),
       anchorCount: commands.filter((c) => c[0] !== 'Z').length,
     };
   }
   if (obj instanceof Polygon) {
+    const m = obj.calcTransformMatrix();
+    const pts = obj.points.map((p) => new Point(p.x - obj.pathOffset.x, p.y - obj.pathOffset.y).transform(m));
     layer.path = {
-      d: 'M ' + obj.points.map((p) => `${round(p.x)} ${round(p.y)}`).join(' L ') + ' Z',
+      d: 'M ' + pts.map((p) => `${round(p.x)} ${round(p.y)}`).join(' L ') + ' Z',
       closed: true,
       anchorCount: obj.points.length,
     };
@@ -241,6 +267,14 @@ export function describeLayer(obj: FabricObject, doc: DocumentSettings): Semanti
       strokeCount: strokes.length,
       colors: [...new Set(strokes.map((s) => colorString(s.stroke)).filter(Boolean) as string[])],
       brushSizes: [...new Set(strokes.map((s) => round((s as BrushStroke).samaBrushSize ?? s.strokeWidth, 1)))],
+      strokes: strokes.map((s) => ({
+        d: s instanceof Path ? pathInArtboard(s, 1) : '',
+        color: colorString(s.stroke),
+        size: round((s as BrushStroke).samaBrushSize ?? s.strokeWidth, 1),
+        opacity: round(s.opacity, 3),
+        hardness: round((s as BrushStroke).samaHardness ?? 1, 2),
+        erased: s.clipPath instanceof ClippingGroup,
+      })),
     };
   }
 

@@ -8,10 +8,10 @@
  * inside groups can be clicked directly. Rectangles and ellipses must first be
  * converted with Object ▸ Convert to Path.
  */
-import { Group, type FabricObject } from 'fabric';
+import { Group } from 'fabric';
 import { Tool, type ToolPointerEvent } from './Tool';
 import { PaintLayer } from '../objects/PaintLayer';
-import { isAnchorEditable, isEffectivelyLocked } from '../meta';
+import { isAnchorEditable } from '../meta';
 import { deepHit } from './SelectTool';
 
 export class DirectSelectTool extends Tool {
@@ -59,9 +59,5 @@ export class DirectSelectTool extends Tool {
 
   onDoubleClick(ev: ToolPointerEvent) {
     this.editor.toggleAnchorAt(ev.viewportPoint);
-  }
-
-  static canEdit(obj: FabricObject) {
-    return isAnchorEditable(obj) && !isEffectivelyLocked(obj);
   }
 }

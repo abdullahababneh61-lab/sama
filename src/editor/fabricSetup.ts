@@ -30,6 +30,8 @@ declare module 'fabric' {
     samaFileName?: string;
     /** For polygons: number of sides (kept so it can be edited later). */
     samaSides?: number;
+    /** True while a text layer's name follows its content (until renamed). */
+    samaAutoName?: boolean;
     /** Set by @erase2d/fabric: which objects the eraser affects. */
     erasable?: boolean | 'deep';
   }
@@ -44,6 +46,7 @@ export const SAMA_PROPERTIES = [
   'samaAssetId',
   'samaFileName',
   'samaSides',
+  'samaAutoName',
 ] as const;
 
 /** Accent colour used for selection handles, matches `--sw-accent`. */

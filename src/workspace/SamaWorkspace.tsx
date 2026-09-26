@@ -27,7 +27,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
-import { Editor } from '../editor/Editor';
+import { Editor, shortcutKey } from '../editor/Editor';
 import type { PngOptions, SamaDocument } from '../editor/serialization';
 import type { DocumentSettings, LayerKind } from '../editor/types';
 import { createWorkspaceStore, DEFAULT_DOCUMENT, type WorkspaceStore } from '../store/workspaceStore';
@@ -260,7 +260,7 @@ export const SamaWorkspace = forwardRef<SamaWorkspaceHandle, SamaWorkspaceProps>
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented || dialog || !inScope() || isTypingTarget(e.target)) return;
       const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? e.metaKey : e.ctrlKey;
-      const k = e.key.toLowerCase();
+      const k = shortcutKey(e);
       // Workspace-level (dialogs, files)
       if (mod && k === 's') {
         e.preventDefault();
@@ -282,7 +282,7 @@ export const SamaWorkspace = forwardRef<SamaWorkspaceHandle, SamaWorkspaceProps>
         actionsRef.current.importImage();
         return;
       }
-      if (e.key === '?' && !mod) {
+      if ((e.key === '?' || e.key === '؟' || (e.code === 'Slash' && e.shiftKey)) && !mod) {
         e.preventDefault();
         actionsRef.current.showShortcuts();
         return;
@@ -326,6 +326,11 @@ export const SamaWorkspace = forwardRef<SamaWorkspaceHandle, SamaWorkspaceProps>
               dir={rtl ? 'rtl' : 'ltr'}
               lang={locale}
               data-testid="sama-workspace"
+              onMouseDown={(e) => {
+                // Buttons shouldn't keep keyboard focus after a click, or Space/Enter
+                // would re-trigger them instead of reaching canvas shortcuts.
+                if ((e.target as HTMLElement).closest('button')) e.preventDefault();
+              }}
             >
               <TopBar actions={actions} extra={topBarActions} />
               <OptionsBar />

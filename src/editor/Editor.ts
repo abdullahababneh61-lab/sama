@@ -43,7 +43,6 @@ import {
   inferKind,
   isEffectivelyLocked,
   kindLabel,
-  layerChildren,
   reassignIds,
   walkLayers,
   isAnchorEditable,
@@ -135,6 +134,8 @@ export class Editor {
   /** Groups temporarily made "interactive" because a child is selected. */
   private openedGroups: Group[] = [];
   private hovered: FabricObject | null = null;
+  /** Overrides the history label of the transform in progress (e.g. Alt-drag → "Duplicate"). */
+  nextTransformLabel: string | null = null;
   private hoveredLayerId: string | null = null;
   private snapLines: SnapLine[] = [];
   private selectionSyncHandle = 0;
@@ -391,8 +392,11 @@ export class Editor {
     c.on('object:modified', (e: ModifiedEvent) => {
       this.snapLines = [];
       const action = e.transform?.action ?? e.action;
-      const label =
-        action === 'drag'
+      const override = this.nextTransformLabel;
+      this.nextTransformLabel = null;
+      const label = override
+        ? override
+        : action === 'drag'
           ? 'Move'
           : action === 'rotate'
             ? 'Rotate'
@@ -1194,6 +1198,7 @@ export class Editor {
       const name = patch.name.trim();
       if (!name || name === obj.samaName) return;
       obj.samaName = name;
+      obj.samaAutoName = false;
       label = 'Rename layer';
     }
     if (patch.visible !== undefined) {
@@ -1595,6 +1600,11 @@ export class Editor {
 
   private handleTextEditExit(text: IText) {
     this.set({ isEditingText: false });
+    // Like Photoshop, text layers are named after their content until renamed.
+    if (text.samaAutoName && text.text.trim()) {
+      const line = text.text.trim().split('\n')[0];
+      text.samaName = line.length > 32 ? `${line.slice(0, 31)}…` : line;
+    }
     if (!text.text.trim()) {
       // Empty text boxes are removed, like in Photoshop/Illustrator.
       this.removeFromParent(text);
@@ -1896,7 +1906,9 @@ export class Editor {
   handleKeyDown(e: KeyboardEvent): boolean {
     const mod = isMac ? e.metaKey : e.ctrlKey;
     const key = e.key;
-    const lower = key.length === 1 ? key.toLowerCase() : key;
+    // Physical key (layout-independent) so shortcuts also work with an
+    // Arabic keyboard layout, where e.g. the V key types "ر".
+    const lower = shortcutKey(e);
 
     // While typing in a text object, only Escape (finish editing) is ours.
     if (this.state.isEditingText) {
@@ -1910,7 +1922,7 @@ export class Editor {
     if (this.tool.onKeyDown(e)) return true;
 
     // Space: temporary hand tool.
-    if (key === ' ' && !mod) {
+    if ((key === ' ' || e.code === 'Space') && !mod) {
       if (!e.repeat) this.beginSpringTool('hand');
       return true;
     }
@@ -2038,15 +2050,15 @@ export class Editor {
       this.setTool(cycle[(i + 1) % cycle.length]);
       return true;
     }
-    if (key === '[' || key === ']') {
-      this.adjustBrushSize(key === ']' ? 1 : -1);
+    if (lower === '[' || lower === ']') {
+      this.adjustBrushSize(lower === ']' ? 1 : -1);
       return true;
     }
     return false;
   }
 
   handleKeyUp(e: KeyboardEvent): boolean {
-    if (e.key === ' ') {
+    if (e.key === ' ' || e.code === 'Space') {
       this.endSpringTool();
       return true;
     }
@@ -2066,19 +2078,9 @@ export class Editor {
     this.updateToolOptions(tool, { size: Math.max(1, Math.min(500, size + direction * step)) });
   }
 
-  /** Debug/testing helper: number of top-level objects. */
-  get objectCount() {
-    return this.canvas.getObjects().length;
-  }
-
   /** Walks all layer objects (used by tests and the host platform). */
   forEachLayer(fn: (obj: FabricObject) => void) {
     walkLayers(this.canvas.getObjects(), (o) => fn(o));
-  }
-
-  /** Returns layer children for a group (used by the layers panel). */
-  childrenOf(obj: FabricObject) {
-    return layerChildren(obj);
   }
 }
 
@@ -2130,4 +2132,29 @@ function pathDataFor(obj: FabricObject): string | null {
     return 'M ' + obj.points.map((p) => `${p.x - o.x} ${p.y - o.y}`).join(' L ') + ' Z';
   }
   return null;
+}
+
+const CODE_KEYS: Record<string, string> = {
+  BracketLeft: '[',
+  BracketRight: ']',
+  Equal: '=',
+  Minus: '-',
+  Semicolon: ';',
+  Backslash: '\\',
+  IntlBackslash: '\\',
+  Slash: '/',
+  NumpadAdd: '+',
+  NumpadSubtract: '-',
+};
+
+/**
+ * Normalized shortcut key for an event: letters/digits come from the physical
+ * key (`e.code`), so shortcuts don't depend on the active keyboard layout.
+ */
+export function shortcutKey(e: KeyboardEvent): string {
+  const code = e.code ?? '';
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3).toLowerCase();
+  if (/^(Digit|Numpad)[0-9]$/.test(code)) return code.slice(-1);
+  if (CODE_KEYS[code]) return CODE_KEYS[code];
+  return e.key.length === 1 ? e.key.toLowerCase() : e.key;
 }

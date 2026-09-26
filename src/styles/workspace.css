@@ -264,6 +264,10 @@
 }
 .sw-options__caption {
   color: var(--sw-text-3);
+  margin-inline-start: 6px;
+}
+.sw-options .sw-slider {
+  margin-inline-end: 4px;
 }
 .sw-options__sep {
   width: 1px;

@@ -113,6 +113,7 @@ export class TextTool extends Tool {
       });
     }
     text.samaKind = 'text';
+    text.samaAutoName = true;
     this.editor.addLayer(text);
     text.enterEditing();
     this.editor.canvas.requestRenderAll();
