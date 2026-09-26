@@ -13,6 +13,7 @@ import {
   Pipette,
   Slash,
   Square,
+  Target,
   Type,
   ZoomIn,
   type LucideIcon,
@@ -51,6 +52,7 @@ export const TOOL_GROUPS: ToolDef[][] = [
     { id: 'hand', icon: Hand, shortcut: 'H' },
     { id: 'zoom', icon: ZoomIn, shortcut: 'Z' },
     { id: 'eyedropper', icon: Pipette, shortcut: 'I' },
+    { id: 'colorSampler', icon: Target, shortcut: 'O' },
   ],
 ];
 

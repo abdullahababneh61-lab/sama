@@ -22,7 +22,8 @@ export type ToolId =
   | 'polygon'
   | 'crop'
   | 'perspectiveCrop'
-  | 'eyedropper';
+  | 'eyedropper'
+  | 'colorSampler';
 
 /** Tools that create shapes by dragging on the canvas. */
 export type ShapeToolId = Extract<ToolId, 'rect' | 'ellipse' | 'line' | 'polygon'>;
@@ -208,4 +209,13 @@ export interface Guides {
 
 export interface HistoryEntryInfo {
   label: string;
+}
+
+/** A Color Sampler point: numbered 1–4, in artboard coordinates. */
+export interface ColorSample {
+  id: number;
+  x: number;
+  y: number;
+  /** Colour under the point (#rrggbb), or null where nothing is visible. */
+  color: string | null;
 }

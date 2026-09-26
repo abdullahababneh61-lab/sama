@@ -23,6 +23,7 @@ export const en = {
   'tool.crop': 'Crop',
   'tool.perspectiveCrop': 'Perspective Crop',
   'tool.eyedropper': 'Eyedropper',
+  'tool.colorSampler': 'Color Sampler',
   'tool.image': 'Import image',
 
   // Tool hints (options bar)
@@ -39,6 +40,7 @@ export const en = {
   'hint.line': 'Drag to draw · Shift = 45° angles',
   'hint.polygon': 'Drag to draw · Shift = regular · Alt = from centre',
   'hint.crop': 'Drag to define crop area · Enter to confirm · Escape to cancel',
+  'hint.colorSampler': 'Click to place a color sample point · Alt+Click a point to remove it · up to 4 points',
   'hint.eyedropper': 'Click to pick a color · Alt+Click to pick stroke color · Escape to cancel',
   'hint.perspectiveCrop': 'Drag corners to define perspective · Enter to confirm · Escape to cancel',
 
@@ -248,6 +250,11 @@ export const en = {
   'toast.openFailed': 'That file is not a valid Sama document.',
   'toast.groupNeedsTwo': 'Select at least two layers to group.',
   'toast.groupSameParent': 'Layers must be in the same group to be grouped together.',
+  'toast.colorSamplerLimit': 'You can place up to 4 sample points. Alt+Click one to remove it first.',
+  'colorSampler.title': 'Color samples',
+  'colorSampler.none': 'No colour here',
+  'colorSampler.remove': 'Remove sample point {n}',
+  'colorSampler.clear': 'Clear all',
   'toast.eyedropperNothing': 'There is no colour to pick here.',
   'toast.perspectiveInvalid': 'The perspective shape must not cross over itself or bend inwards. Adjust the corners and try again.',
   'toast.convertToPathHint': 'Use Object ▸ Convert to path to edit this shape’s points.',

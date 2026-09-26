@@ -1491,3 +1491,109 @@
   width: 0;
   height: 0;
 }
+
+/* Color Sampler readout (floats in the canvas's top corner) */
+.sw-sampler {
+  position: absolute;
+  top: calc(var(--ruler) + 10px);
+  inset-inline-end: 10px;
+  z-index: 15;
+  width: 212px;
+  padding: 6px;
+  background: var(--sw-panel-2);
+  border: 1px solid var(--sw-border-strong);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+}
+.sw-sampler ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sw-sampler__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 6px;
+  color: var(--sw-text-2);
+  font-weight: 600;
+}
+.sw-sampler__clear {
+  border: 0;
+  background: transparent;
+  color: var(--sw-accent);
+  font-size: 11px;
+  cursor: pointer;
+}
+.sw-sampler__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 5px;
+}
+.sw-sampler__row:hover {
+  background: var(--sw-hover);
+}
+.sw-sampler__num {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  background: var(--sw-accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  flex: none;
+}
+.sw-sampler__swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  flex: none;
+}
+.sw-sampler__swatch.is-none {
+  background: repeating-conic-gradient(#d0d0d6 0% 25%, #fff 0% 50%) 50% / 8px 8px;
+}
+.sw-sampler__value {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.25;
+}
+.sw-sampler__value strong {
+  font: 600 11.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--sw-text);
+}
+.sw-sampler__value small {
+  color: var(--sw-text-3);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+.sw-sampler__value--none {
+  color: var(--sw-text-3);
+}
+.sw-sampler__remove {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--sw-text-3);
+  cursor: pointer;
+  opacity: 0;
+}
+.sw-sampler__row:hover .sw-sampler__remove,
+.sw-sampler__remove:focus-visible {
+  opacity: 1;
+}
+.sw-sampler__remove:hover {
+  background: var(--sw-hover);
+  color: var(--sw-text);
+}

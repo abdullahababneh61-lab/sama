@@ -486,3 +486,49 @@ test.describe('eyedropper tool', () => {
     expectNoErrors(errors);
   });
 });
+
+test.describe('color sampler tool', () => {
+  test('O places up to 4 live sample points; drag, Alt+click and Escape', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    const samples = () =>
+      page.evaluate(() => (window as any).samaEditor.store.getState().colorSamples.map((s: any) => `${s.id}:${s.color}`));
+    const optionsBefore = await page.evaluate(() => JSON.stringify((window as any).samaEditor.toolOptions));
+    await page.keyboard.press('m');
+    await drag(page, [100, 100], [500, 500]);
+    await page.evaluate(() => (window as any).samaEditor.updateSelection({ fill: '#e5484d' }));
+
+    await page.keyboard.press('o');
+    expect((await workspaceState(page)).tool).toBe('colorSampler');
+    await clickAt(page, 150, 150);
+    await clickAt(page, 700, 700);
+    await clickAt(page, 800, 800);
+    await clickAt(page, 900, 900);
+    expect(await samples()).toEqual(['1:#e5484d', '2:#ffffff', '3:#ffffff', '4:#ffffff']);
+    await clickAt(page, 950, 150); // a fifth point is ignored
+    expect(await samples()).toHaveLength(4);
+    await expect(page.getByTestId('color-sampler-panel').locator('li')).toHaveCount(4);
+    await expect(page.getByTestId('color-sample-1')).toContainText('#E5484D');
+
+    await drag(page, [700, 700], [300, 300]); // move point 2 onto the red square
+    expect((await samples())[1]).toBe('2:#e5484d');
+    await clickAt(page, 800, 800, ['Alt']); // remove point 3
+    expect(await samples()).toEqual(['1:#e5484d', '2:#e5484d', '4:#ffffff']);
+
+    // Readings follow artwork changes.
+    await page.evaluate(() => {
+      const ed = (window as any).samaEditor;
+      ed.selectByIds([ed.store.getState().layers[0].id]);
+      return ed.updateSelection({ fill: '#46a758' });
+    });
+    await expect.poll(samples).toEqual(['1:#46a758', '2:#46a758', '4:#ffffff']);
+
+    await page.keyboard.press('Escape'); // hides, keeps the points
+    await expect(page.getByTestId('color-sampler-panel')).toHaveCount(0);
+    expect(await samples()).toHaveLength(3);
+    await page.keyboard.press('v');
+    await page.keyboard.press('o'); // coming back shows them again
+    await expect(page.getByTestId('color-sampler-panel').locator('li')).toHaveCount(3);
+    expect(await page.evaluate(() => JSON.stringify((window as any).samaEditor.toolOptions))).toBe(optionsBefore);
+    expectNoErrors(errors);
+  });
+});

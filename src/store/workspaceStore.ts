@@ -15,6 +15,7 @@
  */
 import { createStore } from 'zustand/vanilla';
 import type {
+  ColorSample,
   DocumentSettings,
   Guides,
   LayerNode,
@@ -46,6 +47,10 @@ export interface WorkspaceState {
   isEditingText: boolean;
   /** Id of the path currently being edited with the Direct Selection tool. */
   editingPathId: string | null;
+  /** Color Sampler points (a viewing aid: not part of the document or undo). */
+  colorSamples: ColorSample[];
+  /** Whether the Color Sampler's points and panel are shown (Esc hides them). */
+  colorSamplerVisible: boolean;
 }
 
 export const DEFAULT_TOOL_OPTIONS: ToolOptions = {
@@ -90,6 +95,8 @@ export function createWorkspaceStore(init?: Partial<WorkspaceState>) {
     toast: null,
     isEditingText: false,
     editingPathId: null,
+    colorSamples: [],
+    colorSamplerVisible: true,
     ...init,
   }));
 }

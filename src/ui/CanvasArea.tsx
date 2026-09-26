@@ -7,6 +7,7 @@ import { useEditor, useWorkspace } from '../workspace/context';
 import { useT } from '../i18n';
 import { Rulers, RULER_SIZE } from './Rulers';
 import { Toast } from './controls/Toast';
+import { ColorSamplerPanel } from './ColorSamplerPanel';
 
 export const CanvasArea = forwardRef<HTMLDivElement>(function CanvasArea(_props, hostRef) {
   const editor = useEditor();
@@ -120,6 +121,7 @@ export const CanvasArea = forwardRef<HTMLDivElement>(function CanvasArea(_props,
           <div>{t('canvas.dropImages')}</div>
         </div>
       )}
+      <ColorSamplerPanel />
       <Toast />
     </div>
   );
