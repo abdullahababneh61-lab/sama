@@ -20,6 +20,7 @@ export const en = {
   'tool.ellipse': 'Ellipse',
   'tool.line': 'Line',
   'tool.polygon': 'Polygon',
+  'tool.crop': 'Crop',
   'tool.image': 'Import image',
 
   // Tool hints (options bar)
@@ -35,6 +36,7 @@ export const en = {
   'hint.ellipse': 'Drag to draw · Shift = circle · Alt = from centre',
   'hint.line': 'Drag to draw · Shift = 45° angles',
   'hint.polygon': 'Drag to draw · Shift = regular · Alt = from centre',
+  'hint.crop': 'Drag to define crop area · Enter to confirm · Escape to cancel',
 
   // Options bar
   'options.label': 'Tool options',
@@ -307,6 +309,7 @@ export const en = {
   'history.Flip vertical': 'Flip vertical',
   'history.Convert to path': 'Convert to path',
   'history.Canvas size': 'Canvas size',
+  'history.Crop': 'Crop',
   'history.Document settings': 'Document settings',
   'history.Rename document': 'Rename document',
   'history.New paint layer': 'New paint layer',

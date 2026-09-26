@@ -56,6 +56,7 @@ existing Chromium: `CHROMIUM_PATH=/path/to/chrome npm run test:e2e`.)
 | Pen | `P` | Click = corner, drag = curve, click first point = close, Enter/Esc = finish, Backspace = remove last point. |
 | Text | `T` | Click = single line, drag = paragraph box. Font, weight, size, colour, alignment, italic, line height, letter spacing, LTR/RTL. |
 | Rectangle / Ellipse / Line / Polygon | `M` / `L` / `\` / `U` cycles | Shift = square/circle/45°, Alt = from centre. Click without dragging = 100 × 100 px. Corner radius, polygon sides. |
+| Crop | `C` | Drag a crop area (Shift = square, Alt = from centre), adjust it with the handles or drag inside to move it; the part to be removed is shaded. Enter crops (layers outside are deleted, layers crossing the edge are trimmed, the artboard takes the new size); Esc cancels. |
 | Hand | `H` or hold `Space` | Pan. Scroll also pans; `Ctrl`/`⌘`+scroll zooms. |
 | Zoom | `Z` | Click zooms in, Alt+click zooms out. |
 | Image import | toolbar button, `Ctrl+Shift+I`, drag-and-drop, paste | PNG/JPEG/WebP/GIF/SVG (SVG is imported as an image). |
@@ -92,7 +93,7 @@ with an Arabic keyboard layout.)
 
 | Area | Shortcut | Action |
 | ---- | -------- | ------ |
-| Tools | `V` `A` `B` `E` `P` `T` `M` `L` `\` `H` `Z` | Select, Direct selection, Brush, Eraser, Pen, Text, Rectangle, Ellipse, Line, Hand, Zoom |
+| Tools | `V` `A` `B` `E` `P` `T` `M` `L` `\` `C` `H` `Z` | Select, Direct selection, Brush, Eraser, Pen, Text, Rectangle, Ellipse, Line, Crop, Hand, Zoom |
 | | `U` | Cycle shape tools (rectangle → ellipse → line → polygon) |
 | | hold `Space` | Temporary hand tool |
 | Edit | `Ctrl+Z` / `Ctrl+Shift+Z` or `Ctrl+Y` | Undo / Redo |

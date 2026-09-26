@@ -89,6 +89,8 @@ import { EraserTool } from './tools/EraserTool';
 import { PenTool } from './tools/PenTool';
 import { TextTool } from './tools/TextTool';
 import { ShapeTool } from './tools/ShapeTool';
+import { CropTool } from './tools/CropTool';
+import { ClippingGroup } from '@erase2d/fabric';
 
 export interface EditorOptions {
   /** Element that will contain the canvas. It must have a size (CSS). */
@@ -195,6 +197,7 @@ export class Editor {
       ellipse: new ShapeTool(this, 'ellipse'),
       line: new ShapeTool(this, 'line'),
       polygon: new ShapeTool(this, 'polygon'),
+      crop: new CropTool(this),
     };
 
     this.bindCanvasEvents();
@@ -1537,6 +1540,95 @@ export class Editor {
     this.commit('Canvas size');
   }
 
+  /**
+   * Crops the artboard to `rect` (artboard coordinates), like Photoshop's crop:
+   * layers entirely outside the rectangle are deleted, layers crossing its edge
+   * are trimmed to it, and the artboard is resized to the rectangle with its
+   * top-left corner becoming the new origin. Applies to every layer, including
+   * hidden and locked ones, and is recorded as one undoable step.
+   */
+  cropArtboard(rect: { x: number; y: number; w: number; h: number }) {
+    const x = Math.round(rect.x);
+    const y = Math.round(rect.y);
+    const w = Math.max(1, Math.min(10000, Math.round(rect.w)));
+    const h = Math.max(1, Math.min(10000, Math.round(rect.h)));
+    const box = { x, y, w, h };
+    this.exitTextEditing();
+    this.stopPathEditing();
+    this.canvas.discardActiveObject();
+    this.closeGroups();
+
+    for (const obj of [...this.canvas.getObjects()]) {
+      if (this.cropLayer(obj, box) === 'remove') this.canvas.remove(obj);
+    }
+    // The crop's top-left corner becomes the artboard origin.
+    for (const obj of this.canvas.getObjects()) {
+      obj.set({ left: obj.left - x, top: obj.top - y });
+      obj.setCoords();
+    }
+    const g = this.state.guides;
+    this.set({
+      doc: { ...this.doc, width: w, height: h },
+      guides: {
+        vertical: g.vertical.map((v) => v - x).filter((v) => v >= 0 && v <= w),
+        horizontal: g.horizontal.map((v) => v - y).filter((v) => v >= 0 && v <= h),
+      },
+    });
+    this.handleSelectionChange();
+    this.fitToScreen();
+    this.commit('Crop');
+  }
+
+  /**
+   * Crops one layer. Returns 'remove' when nothing of it remains inside the
+   * crop box. Groups (and paint layers) are cropped child by child, so what's
+   * removed stays removed even if children are moved or added later.
+   */
+  private cropLayer(obj: FabricObject, box: { x: number; y: number; w: number; h: number }): 'keep' | 'remove' {
+    obj.setCoords();
+    const r = obj.getBoundingRect();
+    const outside = r.left >= box.x + box.w || r.left + r.width <= box.x || r.top >= box.y + box.h || r.top + r.height <= box.y;
+    if (outside) return 'remove';
+    const inside = r.left >= box.x && r.top >= box.y && r.left + r.width <= box.x + box.w && r.top + r.height <= box.y + box.h;
+    if (inside) return 'keep';
+    if (obj instanceof Group) {
+      for (const child of [...obj.getObjects()]) {
+        if (this.cropLayer(child, box) === 'remove') obj.remove(child);
+      }
+      obj.set('dirty', true);
+      return obj.getObjects().length ? 'keep' : 'remove';
+    }
+    this.trimToBox(obj, box);
+    return 'keep';
+  }
+
+  /**
+   * Hides the part of a layer outside the crop box with a clip mask stored in
+   * the layer's own coordinates (so the trimmed edge travels with the layer).
+   */
+  private trimToBox(obj: FabricObject, box: { x: number; y: number; w: number; h: number }) {
+    const toLocal = util.invertTransform(obj.calcTransformMatrix());
+    const corners = [
+      [box.x, box.y],
+      [box.x + box.w, box.y],
+      [box.x + box.w, box.y + box.h],
+      [box.x, box.y + box.h],
+    ].map(([px, py]) => new Point(px, py).transform(toLocal));
+    const mask = new Polygon(corners, { fill: '#000000', stroke: '', strokeWidth: 0 });
+    if (!obj.clipPath) {
+      obj.clipPath = mask;
+    } else if (obj.clipPath instanceof ClippingGroup) {
+      // Already erased: intersect the eraser mask with the crop area.
+      obj.clipPath.add(mask);
+      obj.clipPath.set('dirty', true);
+    } else {
+      // No other kind of clip mask is created by the workspace. Leave such a
+      // layer as is: its outside part is off the artboard and not exported.
+      return;
+    }
+    obj.set('dirty', true);
+  }
+
   // =========================================================================
   // Clipboard
   // =========================================================================
@@ -2038,6 +2130,7 @@ export class Editor {
       m: 'rect',
       l: 'ellipse',
       '\\': 'line',
+      c: 'crop',
     };
     if (!e.altKey && toolKeys[lower]) {
       this.setTool(toolKeys[lower]);

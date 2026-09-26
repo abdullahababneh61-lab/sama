@@ -9,8 +9,7 @@
  */
 import { Ellipse, Path, Point, Polygon, Rect, type FabricObject } from 'fabric';
 import { Tool, type ToolPointerEvent } from './Tool';
-import { constrainTo45 } from '../geometry';
-import { regularPolygonPoints } from '../geometry';
+import { constrainTo45, dragBox, regularPolygonPoints } from '../geometry';
 import type { ShapeToolId } from '../types';
 
 const DEFAULT_SIZE = 100;
@@ -116,24 +115,8 @@ export class ShapeTool extends Tool {
       this.applyLine(start, end);
       return;
     }
-    let w = p.x - s.x;
-    let h = p.y - s.y;
-    if (shift) {
-      const m = Math.max(Math.abs(w), Math.abs(h));
-      w = Math.sign(w || 1) * m;
-      h = Math.sign(h || 1) * m;
-    }
-    let x = w < 0 ? s.x + w : s.x;
-    let y = h < 0 ? s.y + h : s.y;
-    let aw = Math.abs(w);
-    let ah = Math.abs(h);
-    if (alt) {
-      x = s.x - aw;
-      y = s.y - ah;
-      aw *= 2;
-      ah *= 2;
-    }
-    this.applyBox(x, y, Math.max(aw, 1), Math.max(ah, 1));
+    const box = dragBox(s, p, shift, alt);
+    this.applyBox(box.x, box.y, box.w, box.h);
   }
 
   private applyBox(x: number, y: number, w: number, h: number) {

@@ -343,3 +343,41 @@ test.describe('keyboard', () => {
     expectNoErrors(errors);
   });
 });
+
+test.describe('crop tool', () => {
+  test('C activates it; Escape cancels; Enter trims layers and resizes the artboard', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.keyboard.press('m');
+    await drag(page, [300, 300], [500, 500]); // inside the crop
+    await drag(page, [550, 550], [900, 700]); // crosses its edge
+    await page.keyboard.press('l');
+    await drag(page, [900, 50], [1050, 200]); // entirely outside
+    await page.keyboard.press('c');
+    expect((await workspaceState(page)).tool).toBe('crop');
+
+    const cropRect = () => page.evaluate(() => (window as any).samaEditor.getTool('crop').rect);
+    await drag(page, [200, 200], [700, 650]);
+    expect(await cropRect()).not.toBeNull();
+    await page.keyboard.press('Escape');
+    expect(await cropRect()).toBeNull();
+    expect(await page.evaluate(() => (window as any).samaEditor.doc.width)).toBe(1080);
+    expect((await workspaceState(page)).layers).toHaveLength(3);
+
+    await drag(page, [200, 200], [700, 650]);
+    await page.keyboard.press('Enter');
+    const doc = await page.evaluate(() => (window as any).samaEditor.doc);
+    expect(Math.abs(doc.width - 500)).toBeLessThanOrEqual(3);
+    expect(Math.abs(doc.height - 450)).toBeLessThanOrEqual(3);
+    const s = await workspaceState(page);
+    expect(s.layers.map((l) => l.name)).toEqual(['Rectangle 2', 'Rectangle 1']); // ellipse removed
+    expect(s.history.labels.at(-1)).toBe('Crop');
+    const clipped = await page.evaluate(() => (window as any).samaEditor.canvas.getObjects().map((o: any) => !!o.clipPath));
+    expect(clipped).toEqual([false, true]); // only the layer crossing the edge is trimmed
+
+    await page.keyboard.press('Control+z');
+    await settle(page);
+    expect(await page.evaluate(() => (window as any).samaEditor.doc.width)).toBe(1080);
+    expect((await workspaceState(page)).layers).toHaveLength(3);
+    expectNoErrors(errors);
+  });
+});

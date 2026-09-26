@@ -19,7 +19,8 @@ export type ToolId =
   | 'rect'
   | 'ellipse'
   | 'line'
-  | 'polygon';
+  | 'polygon'
+  | 'crop';
 
 /** Tools that create shapes by dragging on the canvas. */
 export type ShapeToolId = Extract<ToolId, 'rect' | 'ellipse' | 'line' | 'polygon'>;
