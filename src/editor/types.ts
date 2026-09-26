@@ -21,7 +21,8 @@ export type ToolId =
   | 'line'
   | 'polygon'
   | 'crop'
-  | 'perspectiveCrop';
+  | 'perspectiveCrop'
+  | 'eyedropper';
 
 /** Tools that create shapes by dragging on the canvas. */
 export type ShapeToolId = Extract<ToolId, 'rect' | 'ellipse' | 'line' | 'polygon'>;

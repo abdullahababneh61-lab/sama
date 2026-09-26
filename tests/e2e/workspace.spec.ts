@@ -450,3 +450,39 @@ test.describe('perspective crop tool', () => {
     expectNoErrors(errors);
   });
 });
+
+test.describe('eyedropper tool', () => {
+  test('I picks fill, Alt picks stroke, returns to the previous tool; Escape cancels', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    const options = () =>
+      page.evaluate(() => {
+        const o = (window as any).samaEditor.toolOptions;
+        return { shapeFill: o.shape.fill, shapeStroke: o.shape.stroke, penFill: o.pen.fill, textFill: o.text.fill, brush: o.brush.color };
+      });
+    await page.keyboard.press('m');
+    await drag(page, [100, 100], [500, 500]);
+    await page.evaluate(() => (window as any).samaEditor.updateSelection({ fill: '#e5484d' }));
+    await drag(page, [300, 300], [700, 700]);
+    await page.evaluate(() => (window as any).samaEditor.updateSelection({ fill: '#0000ff', opacity: 0.5 }));
+    await page.evaluate(() => (window as any).samaEditor.addGuide('horizontal', 150)); // guides must not be picked
+
+    await page.keyboard.press('i');
+    expect((await workspaceState(page)).tool).toBe('eyedropper');
+    await clickAt(page, 150, 150);
+    expect((await workspaceState(page)).tool).toBe('rect'); // back to the previous tool
+    expect(await options()).toMatchObject({ shapeFill: '#e5484d', penFill: '#e5484d', textFill: '#e5484d', brush: '#e5484d' });
+
+    await page.keyboard.press('i');
+    await clickAt(page, 400, 400, ['Alt']); // 50% blue over red
+    const o = await options();
+    expect(o.shapeStroke).toBe('#7224a6');
+    expect(o.shapeFill).toBe('#e5484d'); // fill untouched
+
+    await page.keyboard.press('i');
+    const before = await options();
+    await page.keyboard.press('Escape');
+    expect((await workspaceState(page)).tool).toBe('rect');
+    expect(await options()).toEqual(before);
+    expectNoErrors(errors);
+  });
+});

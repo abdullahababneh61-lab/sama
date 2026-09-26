@@ -91,6 +91,7 @@ import { TextTool } from './tools/TextTool';
 import { ShapeTool } from './tools/ShapeTool';
 import { CropTool } from './tools/CropTool';
 import { PerspectiveCropTool } from './tools/PerspectiveCropTool';
+import { EyedropperTool } from './tools/EyedropperTool';
 import { correctedSize, isValidQuad, type XY } from './perspective';
 import { perspectiveWarpLayers } from './perspectiveCrop';
 import { ClippingGroup } from '@erase2d/fabric';
@@ -128,6 +129,8 @@ export class Editor {
   private readonly brushCursor: HTMLDivElement;
   private readonly tools: Record<ToolId, Tool>;
   private activeToolId: ToolId = 'select';
+  /** The tool that was active before the current one (the eyedropper returns to it). */
+  private previousToolId: ToolId | null = null;
   /** Tool temporarily active while a key is held (Space → hand). */
   private springToolId: ToolId | null = null;
   private readonly resizeObserver: ResizeObserver;
@@ -202,6 +205,7 @@ export class Editor {
       polygon: new ShapeTool(this, 'polygon'),
       crop: new CropTool(this),
       perspectiveCrop: new PerspectiveCropTool(this),
+      eyedropper: new EyedropperTool(this),
     };
 
     this.bindCanvasEvents();
@@ -274,6 +278,10 @@ export class Editor {
     return this.activeToolId;
   }
 
+  get previousTool(): ToolId | null {
+    return this.previousToolId;
+  }
+
   getTool<T extends Tool>(id: ToolId): T {
     return this.tools[id] as T;
   }
@@ -282,6 +290,7 @@ export class Editor {
     if (id === this.activeToolId && !this.springToolId) return;
     this.tool.deactivate();
     this.springToolId = null;
+    this.previousToolId = this.activeToolId;
     this.activeToolId = id;
     this.applyToolMode();
     this.tool.activate();
@@ -2174,6 +2183,7 @@ export class Editor {
       l: 'ellipse',
       '\\': 'line',
       c: 'crop',
+      i: 'eyedropper',
     };
     // Shift+C: Perspective Crop (plain C is the regular Crop tool).
     if (lower === 'c' && e.shiftKey && !e.altKey) {

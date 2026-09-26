@@ -58,6 +58,7 @@ existing Chromium: `CHROMIUM_PATH=/path/to/chrome npm run test:e2e`.)
 | Rectangle / Ellipse / Line / Polygon | `M` / `L` / `\` / `U` cycles | Shift = square/circle/45°, Alt = from centre. Click without dragging = 100 × 100 px. Corner radius, polygon sides. |
 | Crop | `C` | Drag a crop area (Shift = square, Alt = from centre), adjust it with the handles or drag inside to move it; the part to be removed is shaded. Enter crops (layers outside are deleted, layers crossing the edge are trimmed, the artboard takes the new size); Esc cancels. |
 | Perspective Crop | `Shift+C` | Drag a starting rectangle, then drag each of the four corners on its own onto the edges of something seen at an angle (a photographed poster, a screen). Enter straightens that shape into a rectangle and crops to it; Esc cancels. Affected layers become image layers (see limitations). |
+| Eyedropper | `I` | A swatch next to the pointer previews the colour under it. Click sets the fill colour of the shape tools, pen, text and brush; Alt+click sets the stroke colour of the shape tools and pen. Returns to the previous tool after a pick; Esc cancels. |
 | Hand | `H` or hold `Space` | Pan. Scroll also pans; `Ctrl`/`⌘`+scroll zooms. |
 | Zoom | `Z` | Click zooms in, Alt+click zooms out. |
 | Image import | toolbar button, `Ctrl+Shift+I`, drag-and-drop, paste | PNG/JPEG/WebP/GIF/SVG (SVG is imported as an image). |
@@ -96,6 +97,7 @@ with an Arabic keyboard layout.)
 | ---- | -------- | ------ |
 | Tools | `V` `A` `B` `E` `P` `T` `M` `L` `\` `C` `H` `Z` | Select, Direct selection, Brush, Eraser, Pen, Text, Rectangle, Ellipse, Line, Crop, Hand, Zoom |
 | | `Shift+C` | Perspective Crop |
+| | `I` | Eyedropper |
 | | `U` | Cycle shape tools (rectangle → ellipse → line → polygon) |
 | | hold `Space` | Temporary hand tool |
 | Edit | `Ctrl+Z` / `Ctrl+Shift+Z` or `Ctrl+Y` | Undo / Redo |

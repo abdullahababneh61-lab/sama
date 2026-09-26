@@ -10,6 +10,7 @@ import {
   MousePointer,
   MousePointer2,
   PenTool,
+  Pipette,
   Slash,
   Square,
   Type,
@@ -49,6 +50,7 @@ export const TOOL_GROUPS: ToolDef[][] = [
   [
     { id: 'hand', icon: Hand, shortcut: 'H' },
     { id: 'zoom', icon: ZoomIn, shortcut: 'Z' },
+    { id: 'eyedropper', icon: Pipette, shortcut: 'I' },
   ],
 ];
 

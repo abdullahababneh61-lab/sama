@@ -37,6 +37,7 @@ export const SHORTCUT_REFERENCE: ShortcutGroup[] = [
       { keys: 'H', label: 'tool.hand' },
       { keys: 'Space', label: 'shortcuts.tempHand' },
       { keys: 'Z', label: 'tool.zoom' },
+      { keys: 'I', label: 'tool.eyedropper' },
     ],
   },
   {
