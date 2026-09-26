@@ -120,9 +120,37 @@ non-destructive (a clip mask on the layer), so it is undoable and exported
 accurately. Text layers are not erasable, matching Photoshop's rule for type
 layers (they would stop being editable text).
 
+### Selections: objects vs. regions
+
+Two kinds of selection coexist, as in Photoshop:
+
+- **Object selection** — which *layers* are selected (Fabric's active
+  object). Used by the Selection, Direct Selection, Group Selection, Object
+  Selection and Magic Wand tools, the layers panel and every layer command.
+- **Region selection** — an *area* of the main artboard, made by the marquee
+  and lasso tools and Quick Selection (`Tool.selectsRegion`). It lives in
+  `Editor.pixelSelection` (`pixelSelection.ts`): a one-byte-per-pixel mask,
+  so shapes combine exactly (add/subtract/invert) and the outline is traced
+  from the mask into closed contours. The animated marching ants are drawn on
+  their own small canvas (`SelectionAnts.ts`) so animating them never
+  re-renders the artwork. Quick Selection and the Magnetic Lasso analyse a
+  clean render of the artboard (`scenePixels.ts`); the lasso's edge-following
+  path is a Dijkstra "live wire" over a Sobel edge map (`edgeTrace.ts`).
+
+### Artboards
+
+The document's main artboard sits at scene `(0,0)` and is described by
+`DocumentSettings` (`name`, `width`, `height`). Extra artboards made with
+the Artboard tool are stored in `DocumentSettings.artboards` (positions
+relative to the main one), so undo/redo and the JSON export cover them with
+no extra machinery. A layer belongs to the artboard containing its centre.
+If the main artboard is moved or its left/top edge dragged,
+`Editor.applyArtboards` shifts the rest of the scene the other way and pans
+the view, so it stays at the origin and nothing jumps on screen.
+
 ### Coordinates
 
-The artboard is the scene's origin: `(0,0)`–`(width,height)` in document
+The main artboard is the scene's origin: `(0,0)`–`(width,height)` in document
 pixels. Zoom and pan are Fabric's `viewportTransform`. Everything the
 properties panel and the export show is in artboard pixels.
 
@@ -169,6 +197,11 @@ src/
     assets.ts                 Imported images (blobs ↔ data URLs)
     fonts.ts                  Bundled fonts + font loading
     snapping.ts, geometry.ts  Maths helpers (pure, unit-tested)
+    pixelSelection.ts         Region selection mask, rasterizers, contours, flood fill
+    edgeTrace.ts              Edge map + live-wire paths (Magnetic Lasso)
+    artboards.ts              Artboard list helpers (main + extra artboards)
+    scenePixels.ts            Clean render of the artboard to RGBA pixels
+    SelectionAnts.ts          Marching-ants overlay canvas
     objects/                  BrushStroke, PaintLayer (custom Fabric classes)
     tools/                    One class per tool (Tool.ts is the base)
   ui/                         React components (toolbar, panels, dialogs, controls)

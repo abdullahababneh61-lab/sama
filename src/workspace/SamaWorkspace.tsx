@@ -156,6 +156,7 @@ export const SamaWorkspace = forwardRef<SamaWorkspaceHandle, SamaWorkspaceProps>
       host: hostRef.current,
       store,
       layerLabels: labels,
+      translate: (key, params) => translate(locale, key, params),
       onChange: () => onChangeRef.current?.(),
     });
     setEditor(ed);

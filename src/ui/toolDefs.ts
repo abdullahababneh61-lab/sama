@@ -1,6 +1,17 @@
 /** Toolbar definitions: icon, label key and shortcut for every tool. */
 import {
   Bandage,
+  CircleDashed,
+  Frame,
+  Lasso,
+  LassoSelect,
+  Magnet,
+  MousePointerClick,
+  Rows2,
+  SquareDashed,
+  SquareDashedMousePointer,
+  Wand,
+  WandSparkles,
   Brush,
   Circle,
   Crop,
@@ -27,7 +38,16 @@ import type { ToolId } from '../editor/types';
 export interface ToolDef {
   id: ToolId;
   icon: LucideIcon;
+  /** Empty when the tool has no shortcut of its own. */
   shortcut: string;
+}
+
+/**
+ * i18n key suffix for a tool's name and hint (`tool.<key>`, `hint.<key>`).
+ * The Move/Select tool is presented as "Selection".
+ */
+export function toolKey(id: ToolId): string {
+  return id === 'select' ? 'selection' : id;
 }
 
 /** Grouped as they appear in the toolbar. */
@@ -35,6 +55,19 @@ export const TOOL_GROUPS: ToolDef[][] = [
   [
     { id: 'select', icon: MousePointer2, shortcut: 'V' },
     { id: 'direct', icon: MousePointer, shortcut: 'A' },
+    { id: 'groupSelection', icon: MousePointerClick, shortcut: 'Shift+V' },
+    { id: 'artboard', icon: Frame, shortcut: 'Shift+O' },
+  ],
+  [
+    { id: 'rectMarquee', icon: SquareDashed, shortcut: 'Shift+M' },
+    { id: 'ellipseMarquee', icon: CircleDashed, shortcut: 'Shift+M' },
+    { id: 'singleRowColumnMarquee', icon: Rows2, shortcut: '' },
+    { id: 'lasso', icon: Lasso, shortcut: 'Q' },
+    { id: 'polygonalLasso', icon: LassoSelect, shortcut: 'Shift+L' },
+    { id: 'magneticLasso', icon: Magnet, shortcut: 'Alt+Shift+L' },
+    { id: 'objectSelection', icon: SquareDashedMousePointer, shortcut: 'W' },
+    { id: 'quickSelection', icon: Wand, shortcut: 'Shift+W' },
+    { id: 'magicWand', icon: WandSparkles, shortcut: 'Y' },
   ],
   [
     { id: 'brush', icon: Brush, shortcut: 'B' },

@@ -21,7 +21,7 @@ artboard, `x` grows to the right, `y` grows downwards.
 | `version`    | `1`                           | Format version. Newer workspaces refuse to open files with a higher version. |
 | `generator`  | string                        | e.g. `"sama-workspace@0.1.0"`. |
 | `exportedAt` | ISO 8601 string               | When the document was produced. |
-| `document`   | `{ name, width, height, background, units }` | Artboard. `background` is a CSS colour or `null` (transparent). `units` is always `"px"`. |
+| `document`   | `{ name, width, height, background, units, artboards? }` | The main artboard. `background` is a CSS colour or `null` (transparent). `units` is always `"px"`. `artboards` (optional, omitted when there are none) lists additional artboards made with the Artboard tool: `{ id, name, x, y, width, height }`, with `x`/`y` relative to the main artboard's top-left corner. They share the main artboard's background. Layer coordinates are always relative to the main artboard. |
 | `guides`     | `{ vertical: number[], horizontal: number[] }` | Guide positions (view aids). |
 | `layers`     | `SemanticLayer[]`             | Layer tree, **top-most layer first** (same order as the Layers panel). |
 | `analysis`   | `DocumentAnalysis`            | Pre-computed summary (see below). |

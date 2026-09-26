@@ -56,12 +56,19 @@ export interface WorkspaceState {
   countMarkers: CountMarker[];
   /** Whether the Count tool's markers are shown (Esc hides them). */
   countVisible: boolean;
+  /** Bounds of the region (marching ants) selection in artboard pixels, or null. */
+  pixelSelection: { x: number; y: number; width: number; height: number } | null;
+  /** Artboard selected with the Artboard tool ('main' or an artboard id). */
+  selectedArtboardId: string | null;
 }
 
 export const DEFAULT_TOOL_OPTIONS: ToolOptions = {
   brush: { size: 12, color: '#1f1f24', opacity: 1, hardness: 0.9, smoothing: 2 },
   eraser: { size: 24 },
   spotHealingBrush: { size: 30 },
+  singleRowColumnMarquee: { orientation: 'row' },
+  quickSelection: { size: 24 },
+  magicWand: { tolerance: 32, contiguous: true },
   shape: { fill: '#d9d9d9', stroke: null, strokeWidth: 2, cornerRadius: 0, sides: 6 },
   pen: { fill: null, stroke: '#1f1f24', strokeWidth: 2 },
   text: {
@@ -105,6 +112,8 @@ export function createWorkspaceStore(init?: Partial<WorkspaceState>) {
     colorSamplerVisible: true,
     countMarkers: [],
     countVisible: true,
+    pixelSelection: null,
+    selectedArtboardId: null,
     ...init,
   }));
 }

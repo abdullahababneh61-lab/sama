@@ -22,8 +22,17 @@ export const SHORTCUT_REFERENCE: ShortcutGroup[] = [
   {
     title: 'shortcuts.tools',
     items: [
-      { keys: 'V', label: 'tool.select' },
+      { keys: 'V', label: 'tool.selection' },
       { keys: 'A', label: 'tool.direct' },
+      { keys: 'Shift+V', label: 'tool.groupSelection' },
+      { keys: 'Shift+O', label: 'tool.artboard' },
+      { keys: 'Shift+M', label: 'shortcuts.cycleMarquee' },
+      { keys: 'Q', label: 'tool.lasso' },
+      { keys: 'Shift+L', label: 'tool.polygonalLasso' },
+      { keys: 'Alt+Shift+L', label: 'tool.magneticLasso' },
+      { keys: 'W', label: 'tool.objectSelection' },
+      { keys: 'Shift+W', label: 'tool.quickSelection' },
+      { keys: 'Y', label: 'tool.magicWand' },
       { keys: 'B', label: 'tool.brush' },
       { keys: 'E', label: 'tool.eraser' },
       { keys: 'P', label: 'tool.pen' },

@@ -41,6 +41,8 @@ export abstract class Tool {
   readonly targetFilter: ((obj: FabricObject) => boolean) | null = null;
   /** When true, selection handles are drawn (otherwise just the outline). */
   readonly showsControls: boolean = false;
+  /** True for tools that make region (marching ants) selections. */
+  readonly selectsRegion: boolean = false;
 
   constructor(protected readonly editor: Editor) {}
 

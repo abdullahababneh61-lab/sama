@@ -27,7 +27,18 @@ export type ToolId =
   | 'ruler'
   | 'count'
   | 'spotHealingBrush'
-  | 'healingBrush';
+  | 'healingBrush'
+  | 'artboard'
+  | 'rectMarquee'
+  | 'ellipseMarquee'
+  | 'singleRowColumnMarquee'
+  | 'lasso'
+  | 'polygonalLasso'
+  | 'magneticLasso'
+  | 'objectSelection'
+  | 'quickSelection'
+  | 'magicWand'
+  | 'groupSelection';
 
 /** Tools that create shapes by dragging on the canvas. */
 export type ShapeToolId = Extract<ToolId, 'rect' | 'ellipse' | 'line' | 'polygon'>;
@@ -74,6 +85,23 @@ export interface DocumentSettings {
   height: number;
   /** CSS color, or `null` for a transparent background. */
   background: string | null;
+  /**
+   * Additional artboards created with the Artboard tool, positioned relative
+   * to the main artboard's top-left corner. Omitted when there are none. The
+   * main artboard is the one described by `name`/`width`/`height` above; it
+   * is always at (0, 0) and is the one PNG export renders.
+   */
+  artboards?: ArtboardSettings[];
+}
+
+/** An additional artboard (see `DocumentSettings.artboards`). */
+export interface ArtboardSettings {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 /** A node in the layers tree shown by the layers panel (top-most first). */
@@ -131,6 +159,21 @@ export interface TextOptions {
   direction: TextDirection;
 }
 
+export interface SingleRowColumnOptions {
+  orientation: 'row' | 'column';
+}
+
+export interface QuickSelectionOptions {
+  size: number;
+}
+
+export interface MagicWandOptions {
+  /** 0–255: how far (per RGB channel) a fill may differ from the clicked one. */
+  tolerance: number;
+  /** Only objects touching the clicked one (directly or through others). */
+  contiguous: boolean;
+}
+
 export interface ToolOptions {
   brush: BrushOptions;
   eraser: EraserOptions;
@@ -139,6 +182,9 @@ export interface ToolOptions {
   shape: ShapeOptions;
   pen: PenOptions;
   text: TextOptions;
+  singleRowColumnMarquee: SingleRowColumnOptions;
+  quickSelection: QuickSelectionOptions;
+  magicWand: MagicWandOptions;
 }
 
 /**

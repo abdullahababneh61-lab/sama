@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { clickAt, drag, expectNoErrors, openWorkspace, settle, workspaceState } from './helpers';
+import { clickAt, drag, expectNoErrors, openWorkspace, settle, toPage, workspaceState } from './helpers';
 
 test.describe('canvas shell', () => {
   test('renders, zooms and pans', async ({ page }) => {
@@ -745,6 +745,491 @@ test.describe('healing brush', () => {
     await page.keyboard.press('Control+z');
     await settle(page);
     expect(await pix(320, 150)).toEqual([32, 0, 0, 255]);
+    expectNoErrors(errors);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Selection tools
+
+const region = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => (window as any).samaEditor.store.getState().pixelSelection as null | { x: number; y: number; width: number; height: number });
+const regionPixels = (page: import('@playwright/test').Page) => page.evaluate(() => (window as any).samaEditor.pixelSelection.pixelCount as number);
+const regionHas = (page: import('@playwright/test').Page, x: number, y: number) =>
+  page.evaluate(([x, y]) => (window as any).samaEditor.pixelSelection.contains(x, y) as boolean, [x, y]);
+const selectedNames = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => (window as any).samaEditor.getSelectedObjects().map((o: any) => o.samaName) as string[]);
+async function addRect(page: import('@playwright/test').Page, fill: string, from: [number, number], to: [number, number]) {
+  await page.evaluate((f) => (window as any).samaEditor.updateToolOptions('shape', { fill: f, stroke: null }), fill);
+  await page.keyboard.press('m');
+  await drag(page, from, to);
+}
+/** Drags a selection handle of the active object (page coordinates from Fabric's control coords). */
+async function dragHandle(page: import('@playwright/test').Page, handle: string, dx: number, dy: number, modifiers: string[] = []) {
+  const p = await page.evaluate((h) => {
+    const ed = (window as any).samaEditor;
+    const o = ed.canvas.getActiveObject();
+    o.setCoords();
+    const r = ed.canvas.upperCanvasEl.getBoundingClientRect();
+    return { x: r.left + o.oCoords[h].x, y: r.top + o.oCoords[h].y };
+  }, handle);
+  await page.mouse.move(p.x, p.y);
+  await page.mouse.down();
+  for (const m of modifiers) await page.keyboard.down(m);
+  await page.mouse.move(p.x + dx / 2, p.y + dy / 2);
+  await page.mouse.move(p.x + dx, p.y + dy);
+  await page.mouse.up();
+  for (const m of modifiers) await page.keyboard.up(m);
+  await page.waitForTimeout(100);
+}
+const activeSize = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => {
+    const o = (window as any).samaEditor.canvas.getActiveObject();
+    return { w: o.getScaledWidth(), h: o.getScaledHeight() };
+  });
+
+test.describe('selection tool', () => {
+  test('V: 8 handles, proportional corners, one-axis edges, marquee, Shift toggle, Esc, Delete', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await addRect(page, '#e5484d', [100, 100], [300, 200]);
+    await addRect(page, '#3e63dd', [500, 100], [600, 300]);
+    await page.keyboard.press('v');
+    expect((await workspaceState(page)).tool).toBe('select');
+    await expect(page.locator('.sw-options__tool')).toHaveText('Selection');
+    await clickAt(page, 150, 150);
+    expect(await selectedNames(page)).toEqual(['Rectangle 1']);
+    const handles = await page.evaluate(() =>
+      Object.keys((window as any).samaEditor.canvas.getActiveObject().oCoords).filter((k) => k !== 'mtr'),
+    );
+    expect(handles.sort()).toEqual(['bl', 'br', 'mb', 'ml', 'mr', 'mt', 'tl', 'tr']);
+    // Corner: proportional.
+    let s0 = await activeSize(page);
+    await dragHandle(page, 'br', 60, 10);
+    let s1 = await activeSize(page);
+    expect(s1.w / s1.h).toBeCloseTo(s0.w / s0.h, 1);
+    // Corner with Shift: free.
+    s0 = s1;
+    await dragHandle(page, 'br', 40, -30, ['Shift']);
+    s1 = await activeSize(page);
+    expect(Math.abs(s1.w / s1.h - s0.w / s0.h)).toBeGreaterThan(0.2);
+    // Edge: one dimension only.
+    s0 = s1;
+    await dragHandle(page, 'mr', 50, 0);
+    s1 = await activeSize(page);
+    expect(s1.w).toBeGreaterThan(s0.w + 20);
+    expect(s1.h).toBeCloseTo(s0.h, 3);
+    // Drag to move.
+    const before = await page.evaluate(() => (window as any).samaEditor.canvas.getActiveObject().left);
+    await drag(page, [150, 150], [150, 350]);
+    expect(await page.evaluate(() => (window as any).samaEditor.canvas.getActiveObject().left)).toBeCloseTo(before, 0);
+    expect(await page.evaluate(() => (window as any).samaEditor.canvas.getActiveObject().top)).toBeGreaterThan(300);
+    // Marquee on empty space selects every intersecting object.
+    await drag(page, [1000, 20], [250, 400]);
+    expect((await selectedNames(page)).sort()).toEqual(['Rectangle 1', 'Rectangle 2']);
+    // Shift+click toggles.
+    await clickAt(page, 550, 150, ['Shift']);
+    expect(await selectedNames(page)).toEqual(['Rectangle 1']);
+    await clickAt(page, 550, 150, ['Shift']);
+    expect((await selectedNames(page)).sort()).toEqual(['Rectangle 1', 'Rectangle 2']);
+    await page.keyboard.press('Escape');
+    expect(await selectedNames(page)).toEqual([]);
+    await clickAt(page, 550, 150);
+    await page.keyboard.press('Delete');
+    expect((await workspaceState(page)).layers.map((l) => l.name)).toEqual(['Rectangle 1']);
+    expectNoErrors(errors);
+  });
+});
+
+test.describe('artboard tool', () => {
+  test('Shift+O: create, move with artwork, resize, rename, delete with confirm, undo', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    const doc = () => page.evaluate(() => (window as any).samaEditor.store.getState().doc);
+    await addRect(page, '#12a594', [100, 100], [300, 300]);
+    await page.evaluate(() => (window as any).samaEditor.zoomTo(0.35));
+    await page.keyboard.press('Shift+O');
+    expect((await workspaceState(page)).tool).toBe('artboard');
+    // Create beside the main artboard.
+    await drag(page, [1200, 0], [1800, 600]);
+    let boards = (await doc()).artboards;
+    expect(boards).toHaveLength(1);
+    expect(boards[0].name).toBe('Artboard 2');
+    expect(Math.abs(boards[0].width - 600)).toBeLessThanOrEqual(3);
+    // Artwork on it moves with it.
+    await addRect(page, '#e5484d', [1300, 100], [1400, 200]);
+    await page.keyboard.press('Shift+O');
+    const x0 = boards[0].x;
+    await drag(page, [1500, 400], [1600, 450]);
+    boards = (await doc()).artboards;
+    expect(Math.abs(boards[0].x - x0 - 100)).toBeLessThanOrEqual(3);
+    const lefts = await page.evaluate(() => (window as any).samaEditor.canvas.getObjects().map((o: any) => Math.round(o.left)));
+    expect(Math.abs(lefts[0] - 200)).toBeLessThanOrEqual(1); // main artboard's rectangle stays
+    expect(Math.abs(lefts[1] - 1450)).toBeLessThanOrEqual(4);
+    // Resize by the right border (artwork stays).
+    const right = boards[0].x + boards[0].width;
+    await drag(page, [right, 300], [right + 100, 300]);
+    boards = (await doc()).artboards;
+    expect(Math.abs(boards[0].width - 700)).toBeLessThanOrEqual(4);
+    expect((await workspaceState(page)).history.labels.slice(-3)).toEqual(['Rectangle', 'Move artboard', 'Resize artboard']);
+    // Rename by double-clicking the label.
+    const lbl = await page.evaluate((a) => {
+      const ed = (window as any).samaEditor;
+      const b = ed.artboardLabelBox(a);
+      const r = ed.canvas.upperCanvasEl.getBoundingClientRect();
+      return { x: r.left + b.x + 5, y: r.top + b.y + b.h / 2 };
+    }, boards[0]);
+    await page.mouse.dblclick(lbl.x, lbl.y);
+    const input = page.getByTestId('artboard-rename');
+    await expect(input).toBeFocused();
+    await input.fill('Story');
+    await input.press('Enter');
+    expect((await doc()).artboards[0].name).toBe('Story');
+    // Delete asks first because there is artwork on it.
+    let asked = '';
+    page.once('dialog', async (d) => {
+      asked = d.message();
+      await d.accept();
+    });
+    await clickAt(page, boards[0].x + 400, boards[0].y + 500);
+    await page.keyboard.press('Delete');
+    expect(asked).toContain('Story');
+    expect((await doc()).artboards).toBeUndefined();
+    expect((await workspaceState(page)).layers).toHaveLength(1);
+    await page.keyboard.press('Control+z');
+    await settle(page);
+    expect((await doc()).artboards[0].name).toBe('Story');
+    expect((await workspaceState(page)).layers).toHaveLength(2);
+    // Exported with the document.
+    const exported = await page.evaluate(async () => (await (window as any).samaEditor.getDocument()).document.artboards);
+    expect(exported[0].name).toBe('Story');
+    await page.keyboard.press('Escape');
+    expect(await page.evaluate(() => (window as any).samaEditor.store.getState().selectedArtboardId)).toBeNull();
+    expectNoErrors(errors);
+  });
+});
+
+test.describe('marquee tools', () => {
+  test('Shift+M rectangular: drag, Shift square, Alt from centre, Shift-start adds, click and Esc clear', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.keyboard.press('Shift+M');
+    expect((await workspaceState(page)).tool).toBe('rectMarquee');
+    await drag(page, [100, 100], [300, 250]);
+    let r = (await region(page))!;
+    expect(Math.abs(r.width - 200)).toBeLessThanOrEqual(2);
+    expect(Math.abs(r.height - 150)).toBeLessThanOrEqual(2);
+    await expect(page.getByTestId('region-size')).toContainText('×');
+    // A new drag replaces…
+    await drag(page, [500, 500], [600, 600]);
+    expect(await regionHas(page, 150, 150)).toBe(false);
+    // …unless Shift is held at the start.
+    await page.keyboard.down('Shift');
+    await drag(page, [100, 100], [200, 180]);
+    await page.keyboard.up('Shift');
+    expect(await regionHas(page, 150, 150)).toBe(true);
+    expect(await regionHas(page, 550, 550)).toBe(true);
+    // Shift during the drag: square.
+    await page.keyboard.press('Escape');
+    expect(await region(page)).toBeNull();
+    const a = await toPage(page, 100, 100);
+    const b = await toPage(page, 400, 200);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(a.x + 20, a.y + 20);
+    await page.keyboard.down('Shift');
+    await page.mouse.move(b.x, b.y, { steps: 4 });
+    await page.mouse.up();
+    await page.keyboard.up('Shift');
+    r = (await region(page))!;
+    expect(r.width).toBe(r.height);
+    // Alt: from the centre.
+    const c = await toPage(page, 540, 540);
+    const d = await toPage(page, 600, 580);
+    await page.mouse.move(c.x, c.y);
+    await page.mouse.down();
+    await page.keyboard.down('Alt');
+    await page.mouse.move(d.x, d.y, { steps: 4 });
+    await page.mouse.up();
+    await page.keyboard.up('Alt');
+    r = (await region(page))!;
+    expect(Math.abs(r.x + r.width / 2 - 540)).toBeLessThanOrEqual(2);
+    expect(Math.abs(r.width - 120)).toBeLessThanOrEqual(3);
+    // A plain click deselects.
+    await clickAt(page, 900, 900);
+    expect(await region(page)).toBeNull();
+    // Marching ants are drawn on their own layer.
+    await drag(page, [100, 100], [300, 250]);
+    const antPixels = await page.evaluate(() => {
+      const c = document.querySelector('[data-testid=selection-ants]') as HTMLCanvasElement;
+      const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i]) n++;
+      return n;
+    });
+    expect(antPixels).toBeGreaterThan(400);
+    expectNoErrors(errors);
+  });
+
+  test('elliptical marquee (Shift+M again) and the options shape switch', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.keyboard.press('Shift+M');
+    await page.keyboard.press('Shift+M');
+    expect((await workspaceState(page)).tool).toBe('ellipseMarquee');
+    await drag(page, [100, 100], [300, 200]);
+    const px = await regionPixels(page);
+    expect(Math.abs(px - Math.PI * 100 * 50) / (Math.PI * 100 * 50)).toBeLessThan(0.05);
+    expect(await regionHas(page, 105, 105)).toBe(false); // corner outside the ellipse
+    expect(await regionHas(page, 200, 150)).toBe(true);
+    await page.keyboard.press('Shift+M');
+    expect((await workspaceState(page)).tool).toBe('rectMarquee');
+    await page.locator('[data-marquee=ellipseMarquee]').click();
+    expect((await workspaceState(page)).tool).toBe('ellipseMarquee');
+    expectNoErrors(errors);
+  });
+
+  test('single row/column marquee: 1px across the artboard, Shift adds, Esc clears', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.keyboard.press('Shift+M');
+    await page.locator('.sw-options [aria-label="Single Row"]').click();
+    expect((await workspaceState(page)).tool).toBe('singleRowColumnMarquee');
+    await clickAt(page, 400, 321.5);
+    let r = (await region(page))!;
+    expect(r).toMatchObject({ x: 0, width: 1080, height: 1 });
+    await page.locator('.sw-options [aria-label="Single Column"]').click();
+    await clickAt(page, 250.5, 400, ['Shift']);
+    r = (await region(page))!;
+    expect(r).toMatchObject({ x: 0, y: 0, width: 1080, height: 1080 });
+    expect(await regionPixels(page)).toBe(1080 + 1080 - 1);
+    await page.keyboard.press('Escape');
+    expect(await region(page)).toBeNull();
+    expectNoErrors(errors);
+  });
+
+  test('region selections: Delete shows a notice, Invert, Crop to Selection, persist across tools', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await addRect(page, '#e5484d', [100, 100], [300, 300]);
+    await page.keyboard.press('Shift+M');
+    await drag(page, [50, 50], [450, 350]);
+    await page.keyboard.press('Delete');
+    expect(await page.evaluate(() => (window as any).samaEditor.store.getState().toast?.message)).toBe('toast.regionDeleteUnsupported');
+    expect((await workspaceState(page)).layers).toHaveLength(1);
+    await page.keyboard.press('b');
+    expect(await region(page)).not.toBeNull();
+    await page.keyboard.press('Shift+M');
+    await page.getByRole('button', { name: 'Invert' }).click();
+    expect(await regionHas(page, 10, 10)).toBe(true);
+    await page.getByRole('button', { name: 'Invert' }).click();
+    await page.getByRole('button', { name: 'Crop to Selection' }).click();
+    const doc = await page.evaluate(() => (window as any).samaEditor.store.getState().doc);
+    expect(Math.abs(doc.width - 400)).toBeLessThanOrEqual(3);
+    expect(Math.abs(doc.height - 300)).toBeLessThanOrEqual(3);
+    expect(await region(page)).toBeNull();
+    expectNoErrors(errors);
+  });
+});
+
+test.describe('lasso tools', () => {
+  test('Q lasso: freehand, auto-closes, Shift adds, Esc cancels mid-drag', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    const trace = async (pts: [number, number][], shift = false) => {
+      const P = [];
+      for (const p of pts) P.push(await toPage(page, ...p));
+      if (shift) await page.keyboard.down('Shift');
+      await page.mouse.move(P[0].x, P[0].y);
+      await page.mouse.down();
+      if (shift) await page.keyboard.up('Shift');
+      for (let i = 1; i < P.length; i++) await page.mouse.move(P[i].x, P[i].y, { steps: 10 });
+      return async () => {
+        await page.mouse.up();
+        await page.waitForTimeout(80);
+      };
+    };
+    await page.keyboard.press('q');
+    expect((await workspaceState(page)).tool).toBe('lasso');
+    await (await trace([[100, 100], [400, 100], [400, 400], [100, 400]]))();
+    expect(await regionHas(page, 250, 250)).toBe(true);
+    expect(await regionHas(page, 500, 500)).toBe(false);
+    await (await trace([[600, 600], [800, 600], [800, 800]], true))();
+    expect(await regionHas(page, 250, 250)).toBe(true);
+    expect(await regionHas(page, 760, 640)).toBe(true);
+    const release = await trace([[100, 700], [300, 700], [300, 900]]);
+    await page.keyboard.press('Escape');
+    await release();
+    expect(await regionHas(page, 250, 250)).toBe(true); // unchanged
+    expect(await regionHas(page, 280, 750)).toBe(false);
+    expectNoErrors(errors);
+  });
+
+  test('Shift+L polygonal lasso: points, Backspace, close on first point, Enter, Esc', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.keyboard.press('Shift+L');
+    expect((await workspaceState(page)).tool).toBe('polygonalLasso');
+    await clickAt(page, 100, 100);
+    await clickAt(page, 400, 100);
+    await clickAt(page, 400, 400);
+    await clickAt(page, 700, 700); // mistake
+    await page.keyboard.press('Backspace');
+    await clickAt(page, 100, 400);
+    expect(await region(page)).toBeNull(); // still open
+    await clickAt(page, 101, 101); // first point closes
+    expect(await regionHas(page, 250, 250)).toBe(true);
+    expect(await regionHas(page, 600, 600)).toBe(false);
+    await clickAt(page, 600, 100);
+    await clickAt(page, 900, 100);
+    await clickAt(page, 750, 300);
+    await page.keyboard.press('Enter');
+    expect(await regionHas(page, 750, 150)).toBe(true);
+    expect(await regionHas(page, 250, 250)).toBe(false); // replaced
+    await clickAt(page, 100, 700);
+    await clickAt(page, 300, 700);
+    await page.keyboard.press('Escape');
+    expect(await regionHas(page, 750, 150)).toBe(true); // cancelled, old selection kept
+    expectNoErrors(errors);
+  });
+
+  test('Alt+Shift+L magnetic lasso snaps to the edges of the artwork', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await addRect(page, '#1f1f24', [200, 200], [500, 500]);
+    await page.keyboard.press('Alt+Shift+L');
+    expect((await workspaceState(page)).tool).toBe('magneticLasso');
+    await clickAt(page, 205, 195);
+    // Wobble around the square, never exactly on its edge.
+    for (const p of [[350, 190], [506, 206], [510, 350], [494, 506], [350, 510], [194, 494], [190, 350], [200, 230]] as [number, number][]) {
+      const q = await toPage(page, ...p);
+      await page.mouse.move(q.x, q.y, { steps: 12 });
+      await page.waitForTimeout(40);
+    }
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100);
+    const r = (await region(page))!;
+    expect(Math.abs(r.x - 200)).toBeLessThanOrEqual(2);
+    expect(Math.abs(r.y - 200)).toBeLessThanOrEqual(2);
+    expect(Math.abs(r.width - 300)).toBeLessThanOrEqual(3);
+    expect(Math.abs((await regionPixels(page)) - 90000)).toBeLessThan(2500);
+    // Backspace removes anchors; Esc cancels.
+    await clickAt(page, 700, 700);
+    const q = await toPage(page, 800, 700);
+    await page.mouse.move(q.x, q.y, { steps: 5 });
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Escape');
+    expect(Math.abs((await regionPixels(page)) - 90000)).toBeLessThan(2500);
+    expectNoErrors(errors);
+  });
+});
+
+test.describe('object-based selection tools', () => {
+  test('W object selection: click, box (mostly inside), Shift adds, Esc', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await addRect(page, '#e5484d', [100, 100], [200, 200]);
+    await addRect(page, '#e5484d', [200, 100], [300, 200]);
+    await addRect(page, '#3e63dd', [600, 100], [700, 200]);
+    await page.keyboard.press('w');
+    expect((await workspaceState(page)).tool).toBe('objectSelection');
+    await clickAt(page, 150, 150);
+    expect(await selectedNames(page)).toEqual(['Rectangle 1']);
+    await clickAt(page, 650, 150, ['Shift']);
+    expect(await selectedNames(page)).toEqual(['Rectangle 1', 'Rectangle 3']);
+    // Box covers all of 1, 60% of 2 and none of 3.
+    await drag(page, [80, 80], [260, 220]);
+    expect(await selectedNames(page)).toEqual(['Rectangle 1', 'Rectangle 2']);
+    // 20% of 2 isn't enough.
+    await drag(page, [80, 80], [220, 220]);
+    expect(await selectedNames(page)).toEqual(['Rectangle 1']);
+    await page.keyboard.press('Escape');
+    expect(await selectedNames(page)).toEqual([]);
+    expectNoErrors(errors);
+  });
+
+  test('Shift+W quick selection paints similar colours; Alt removes; Esc clears', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await addRect(page, '#e5484d', [200, 200], [500, 500]);
+    await page.keyboard.press('Shift+W');
+    expect((await workspaceState(page)).tool).toBe('quickSelection');
+    await drag(page, [300, 300], [330, 310]);
+    const r = (await region(page))!;
+    // Grew from the brush to the whole red square, and stopped at its edge.
+    expect(Math.abs(r.x - 200)).toBeLessThanOrEqual(2);
+    expect(Math.abs(r.width - 300)).toBeLessThanOrEqual(3);
+    // Painting on the white background adds it too.
+    await drag(page, [700, 700], [705, 705]);
+    expect(await regionHas(page, 50, 50)).toBe(true);
+    // Alt+paint on the square removes it.
+    await page.keyboard.down('Alt');
+    await drag(page, [350, 350], [352, 352]);
+    await page.keyboard.up('Alt');
+    expect(await regionHas(page, 350, 350)).toBe(false);
+    expect(await regionHas(page, 50, 50)).toBe(true);
+    await page.keyboard.press(']');
+    expect(await page.evaluate(() => (window as any).samaEditor.store.getState().toolOptions.quickSelection.size)).toBe(29);
+    await page.keyboard.press('Escape');
+    expect(await region(page)).toBeNull();
+    expectNoErrors(errors);
+  });
+
+  test('Y magic wand: tolerance, contiguous toggle, Shift adds, Esc', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await addRect(page, '#ff0000', [100, 100], [200, 200]); // 1
+    await addRect(page, '#ff1010', [200, 100], [300, 200]); // 2 touches 1, similar
+    await addRect(page, '#f01818', [600, 100], [700, 200]); // 3 far, similar
+    await addRect(page, '#0000ff', [100, 400], [200, 500]); // 4 blue
+    await page.keyboard.press('y');
+    expect((await workspaceState(page)).tool).toBe('magicWand');
+    const opts = await page.evaluate(() => (window as any).samaEditor.store.getState().toolOptions.magicWand);
+    expect(opts).toEqual({ tolerance: 32, contiguous: true });
+    await clickAt(page, 150, 150);
+    expect(await selectedNames(page)).toEqual(['Rectangle 1', 'Rectangle 2']);
+    await page.getByTestId('magic-wand-contiguous').uncheck();
+    await clickAt(page, 150, 150);
+    expect(await selectedNames(page)).toEqual(['Rectangle 1', 'Rectangle 2', 'Rectangle 3']);
+    await page.evaluate(() => (window as any).samaEditor.updateToolOptions('magicWand', { tolerance: 0 }));
+    await clickAt(page, 150, 150);
+    expect(await selectedNames(page)).toEqual(['Rectangle 1']);
+    await clickAt(page, 150, 450, ['Shift']);
+    expect(await selectedNames(page)).toEqual(['Rectangle 1', 'Rectangle 4']);
+    await page.keyboard.press('Escape');
+    expect(await selectedNames(page)).toEqual([]);
+    expectNoErrors(errors);
+  });
+
+  test('Shift+V group selection climbs the group hierarchy; drag moves the item', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await addRect(page, '#e5484d', [100, 100], [200, 200]);
+    await addRect(page, '#3e63dd', [200, 100], [300, 200]);
+    await addRect(page, '#12a594', [100, 300], [200, 400]);
+    await page.evaluate(() => {
+      const ed = (window as any).samaEditor;
+      const ids = (names: string[]) => ed.store.getState().layers.filter((l: any) => names.includes(l.name)).map((l: any) => l.id);
+      ed.selectByIds(ids(['Rectangle 1', 'Rectangle 2']));
+      ed.groupSelection();
+      ed.selectByIds(ids(['Group 1', 'Rectangle 3']));
+      ed.groupSelection();
+      ed.clearSelection();
+    });
+    await page.keyboard.press('Shift+V');
+    expect((await workspaceState(page)).tool).toBe('groupSelection');
+    await clickAt(page, 150, 150);
+    expect(await selectedNames(page)).toEqual(['Rectangle 1']);
+    await clickAt(page, 150, 150);
+    expect(await selectedNames(page)).toEqual(['Group 1']);
+    await clickAt(page, 150, 150);
+    expect(await selectedNames(page)).toEqual(['Group 2']);
+    await clickAt(page, 150, 150);
+    expect(await selectedNames(page)).toEqual(['Group 2']);
+    await clickAt(page, 250, 150);
+    expect(await selectedNames(page)).toEqual(['Group 2']); // still inside the selected group
+    await page.keyboard.press('Escape');
+    await clickAt(page, 250, 150);
+    expect(await selectedNames(page)).toEqual(['Rectangle 2']);
+    await drag(page, [250, 150], [250, 650]);
+    const moved = await page.evaluate(() => {
+      const o = (window as any).samaEditor.getSelectedObjects()[0];
+      o.setCoords();
+      return { name: o.samaName, top: o.getBoundingRect().top, parent: o.parent?.samaName };
+    });
+    expect(moved.name).toBe('Rectangle 2');
+    expect(moved.parent).toBe('Group 1');
+    expect(moved.top).toBeGreaterThan(550);
+    expect((await workspaceState(page)).history.labels.at(-1)).toBe('Move');
+    await page.keyboard.press('Escape');
+    expect(await selectedNames(page)).toEqual([]);
     expectNoErrors(errors);
   });
 });

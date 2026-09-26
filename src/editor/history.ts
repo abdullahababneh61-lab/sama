@@ -125,7 +125,8 @@ export function snapshotsEqual(a: Snapshot, b: Snapshot) {
     a.doc.width !== b.doc.width ||
     a.doc.height !== b.doc.height ||
     a.doc.background !== b.doc.background ||
-    a.doc.name !== b.doc.name
+    a.doc.name !== b.doc.name ||
+    JSON.stringify(a.doc.artboards ?? []) !== JSON.stringify(b.doc.artboards ?? [])
   ) {
     return false;
   }

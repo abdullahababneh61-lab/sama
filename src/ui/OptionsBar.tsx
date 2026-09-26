@@ -9,13 +9,20 @@ import {
   AlignEndVertical,
   AlignStartHorizontal,
   AlignStartVertical,
+  CircleDashed,
+  Columns2,
   FlipHorizontal2,
+  Rows2,
+  SquareDashed,
   FlipVertical2,
   Group,
   Ungroup,
 } from 'lucide-react';
 import { useEditor, useWorkspace } from '../workspace/context';
 import type { CountTool } from '../editor/tools/CountTool';
+import type { ArtboardTool } from '../editor/tools/ArtboardTool';
+import type { ToolId } from '../editor/types';
+import { toolKey } from './toolDefs';
 import { useT } from '../i18n';
 import { NumberField } from './controls/NumberField';
 import { Slider } from './controls/Slider';
@@ -30,7 +37,29 @@ export function OptionsBar() {
     switch (tool) {
       case 'select':
       case 'direct':
+      case 'objectSelection':
+      case 'groupSelection':
         return <SelectOptions />;
+      case 'magicWand':
+        return (
+          <>
+            <MagicWandOptions />
+            <span className="sw-options__sep" />
+            <SelectOptions />
+          </>
+        );
+      case 'rectMarquee':
+      case 'ellipseMarquee':
+      case 'singleRowColumnMarquee':
+        return <RegionOptions marquee />;
+      case 'lasso':
+      case 'polygonalLasso':
+      case 'magneticLasso':
+        return <RegionOptions />;
+      case 'quickSelection':
+        return <RegionOptions quickSelection />;
+      case 'artboard':
+        return <ArtboardOptions />;
       case 'brush':
         return <BrushOptions />;
       case 'eraser':
@@ -56,10 +85,10 @@ export function OptionsBar() {
   })();
   return (
     <div className="sw-options" role="toolbar" aria-label={t('options.label')}>
-      <span className="sw-options__tool">{t(`tool.${tool}`)}</span>
+      <span className="sw-options__tool">{t(`tool.${toolKey(tool)}`)}</span>
       <span className="sw-options__sep" />
       {content}
-      <span className="sw-options__hint">{t(`hint.${tool}`)}</span>
+      <span className="sw-options__hint">{t(`hint.${toolKey(tool)}`)}</span>
     </div>
   );
 }
@@ -247,6 +276,104 @@ function SpotHealOptions() {
     <div className="sw-options__group">
       <NumberField label={t('options.size')} value={o.size} min={1} max={500} suffix="px" width={96} onChange={(v) => editor?.updateToolOptions('spotHealingBrush', { size: v })} />
       <span className="sw-options__caption">{t('options.spotHealImagesOnly')}</span>
+    </div>
+  );
+}
+
+/**
+ * Options of the region-selection tools: the marquee shape switch (the
+ * three marquee tools and the Row/Column choice), the Quick Selection brush
+ * size, and the current selection with Invert / Crop / Deselect.
+ */
+function RegionOptions({ marquee = false, quickSelection = false }: { marquee?: boolean; quickSelection?: boolean }) {
+  const editor = useEditor();
+  const t = useT();
+  const tool = useWorkspace((s) => s.activeTool);
+  const orientation = useWorkspace((s) => s.toolOptions.singleRowColumnMarquee.orientation);
+  const size = useWorkspace((s) => s.toolOptions.quickSelection.size);
+  const sel = useWorkspace((s) => s.pixelSelection);
+  const shape = (id: ToolId, label: string, icon: React.ReactNode, active: boolean, onClick: () => void) => (
+    <IconButton label={label} size="sm" active={active} onClick={onClick} data-marquee={id}>
+      {icon}
+    </IconButton>
+  );
+  const rowCol = (o: 'row' | 'column') => () => {
+    editor?.updateToolOptions('singleRowColumnMarquee', { orientation: o });
+    editor?.setTool('singleRowColumnMarquee');
+  };
+  return (
+    <div className="sw-options__group">
+      {marquee && (
+        <>
+          <span className="sw-options__caption">{t('options.marqueeShape')}</span>
+          {shape('rectMarquee', t('tool.rectMarquee'), <SquareDashed size={16} />, tool === 'rectMarquee', () => editor?.setTool('rectMarquee'))}
+          {shape('ellipseMarquee', t('tool.ellipseMarquee'), <CircleDashed size={16} />, tool === 'ellipseMarquee', () => editor?.setTool('ellipseMarquee'))}
+          {shape('singleRowColumnMarquee', t('options.singleRow'), <Rows2 size={16} />, tool === 'singleRowColumnMarquee' && orientation === 'row', rowCol('row'))}
+          {shape('singleRowColumnMarquee', t('options.singleColumn'), <Columns2 size={16} />, tool === 'singleRowColumnMarquee' && orientation === 'column', rowCol('column'))}
+          <span className="sw-options__sep" />
+        </>
+      )}
+      {quickSelection && (
+        <>
+          <NumberField label={t('options.size')} value={size} min={1} max={500} suffix="px" width={96} onChange={(v) => editor?.updateToolOptions('quickSelection', { size: v })} />
+          <span className="sw-options__sep" />
+        </>
+      )}
+      <span className="sw-options__caption" data-testid="region-size">
+        {sel ? t('options.selectionSize', { w: Math.round(sel.width), h: Math.round(sel.height) }) : t('options.noSelection')}
+      </span>
+      <button type="button" className="sw-btn sw-btn--ghost" onClick={() => editor?.invertPixelSelection()}>
+        {t('options.invertSelection')}
+      </button>
+      <button type="button" className="sw-btn sw-btn--ghost" disabled={!sel} onClick={() => editor?.cropToPixelSelection()}>
+        {t('options.cropToSelection')}
+      </button>
+      <button type="button" className="sw-btn sw-btn--ghost" disabled={!sel} onClick={() => editor?.clearPixelSelection()}>
+        {t('menu.deselect')}
+      </button>
+    </div>
+  );
+}
+
+function MagicWandOptions() {
+  const editor = useEditor();
+  const t = useT();
+  const o = useWorkspace((s) => s.toolOptions.magicWand);
+  return (
+    <div className="sw-options__group">
+      <NumberField label={t('options.tolerance')} value={o.tolerance} min={0} max={255} width={90} onChange={(v) => editor?.updateToolOptions('magicWand', { tolerance: Math.round(v) })} />
+      <label className="sw-check sw-check--inline sw-options__check">
+        <input type="checkbox" checked={o.contiguous} onChange={(e) => editor?.updateToolOptions('magicWand', { contiguous: e.target.checked })} data-testid="magic-wand-contiguous" />
+        {t('options.contiguous')}
+      </label>
+    </div>
+  );
+}
+
+function ArtboardOptions() {
+  const editor = useEditor();
+  const t = useT();
+  const selectedId = useWorkspace((s) => s.selectedArtboardId);
+  const doc = useWorkspace((s) => s.doc);
+  const all = [{ id: 'main', name: doc.name, width: doc.width, height: doc.height }, ...(doc.artboards ?? [])];
+  const board = all.find((a) => a.id === selectedId);
+  return (
+    <div className="sw-options__group">
+      <span className="sw-options__caption" data-testid="artboard-count">
+        {t('artboard.count', { count: all.length })}
+      </span>
+      <span className="sw-options__sep" />
+      <span className="sw-options__caption">
+        {board ? `${board.name} · ${board.width} × ${board.height} px` : t('artboard.noneSelected')}
+      </span>
+      <button
+        type="button"
+        className="sw-btn sw-btn--ghost"
+        disabled={!board || all.length < 2}
+        onClick={() => board && editor?.getTool<ArtboardTool>('artboard').deleteArtboard(board.id)}
+      >
+        {t('artboard.delete')}
+      </button>
     </div>
   );
 }

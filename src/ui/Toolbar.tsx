@@ -1,6 +1,6 @@
 import { ImagePlus } from 'lucide-react';
 import { IconButton } from './controls/IconButton';
-import { TOOL_GROUPS } from './toolDefs';
+import { TOOL_GROUPS, toolKey } from './toolDefs';
 import { useEditor, useWorkspace } from '../workspace/context';
 import { useT } from '../i18n';
 
@@ -18,8 +18,8 @@ export function Toolbar({ onImportImage }: { onImportImage: () => void }) {
             return (
               <IconButton
                 key={tool.id}
-                label={t(`tool.${tool.id}`)}
-                shortcut={tool.shortcut}
+                label={t(`tool.${toolKey(tool.id)}`)}
+                shortcut={tool.shortcut || undefined}
                 tooltipSide="right"
                 active={active === tool.id}
                 data-tool={tool.id}

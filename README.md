@@ -49,8 +49,19 @@ existing Chromium: `CHROMIUM_PATH=/path/to/chrome npm run test:e2e`.)
 
 | Tool | Key | Notes |
 | ---- | --- | ----- |
-| Move / Select | `V` | Move, resize, rotate (Shift snaps rotation to 15°). Marquee-select. `Ctrl`/`⌘`+click selects inside groups. Double-click a group to go inside it. Alt+drag duplicates. |
+| Selection (Move / Select) | `V` | Click to select (8 resize handles + rotation), drag to move. Corner handles resize proportionally (hold Shift for free resizing); edge handles resize one dimension. Drag on empty space to marquee-select every object it touches; Shift+click adds/removes. Rotation snaps to 15° with Shift. `Ctrl`/`⌘`+click selects inside groups; double-click a group to go inside it. Alt+drag duplicates. Esc deselects, Delete removes. |
 | Direct Selection | `A` | Edit anchor points and Bézier handles of paths, lines and polygons. Handles move with their anchor; smooth points keep handles aligned (Alt breaks them). Double-click an anchor to switch corner ↔ smooth. |
+| Group Selection | `Shift+V` | First click selects the innermost layer inside a group; each further click on it selects the group one level up. Drag moves the selected item without ungrouping. Esc deselects. |
+| Artboard | `Shift+O` | Artboards show with a border and their name. Drag on the empty pasteboard to add "Artboard N"; drag a border or handle to resize; drag inside to move an artboard together with its artwork; double-click the name to rename; Delete removes the artboard and its artwork (asks first). The first artboard is the main one — its name is the document name and it's what PNG export renders. |
+| Rectangular Marquee | `Shift+M` | Drag to select an area (animated "marching ants"). Shift = square, Alt = from centre. A new drag replaces the selection; Shift held when starting adds to it. Click or Esc deselects. |
+| Elliptical Marquee | `Shift+M` again | Same, for an elliptical area (Shift = circle). |
+| Single Row/Column Marquee | options bar | Click to select one 1-px row across the artboard (or one column down it); pick Row/Column in the marquee options. Shift+click adds. |
+| Lasso | `Q` | Drag to draw a freehand selection; it closes when you release. Shift when starting adds. Esc cancels. |
+| Polygonal Lasso | `Shift+L` | Click to place points (a live segment follows the pointer; Shift = 45°). Click the first point, double-click or press Enter to close; Backspace removes the last point; Esc cancels. |
+| Magnetic Lasso | `Alt+Shift+L` | Click once, then move along an edge: the outline clings to the strongest contrast edge nearby and places anchors automatically (click to add one). Close on the first point, double-click or Enter; Backspace removes an anchor; Esc cancels. |
+| Object Selection | `W` | Click a layer to select it; drag a box to select the layers mostly inside it (≥ 50 % of their bounds). Shift adds. Esc deselects. |
+| Quick Selection | `Shift+W` | Paint to select: the area under the round brush plus similar colours around it. Alt+paint removes. `[` / `]` resize. Esc deselects. |
+| Magic Wand | `Y` | Click a layer to select every layer of a similar colour. Tolerance (0–255, default 32) and Contiguous (only layers touching it, on by default) in the options bar. Shift+click adds. Esc deselects. |
 | Brush | `B` | Size, colour, opacity, **hardness** (soft edges), smoothing. Shift = straight line. `[` / `]` resize. Strokes go into the selected paint layer (or a new one). |
 | Eraser | `E` | Erases the selected layers, or everything unlocked under the cursor when nothing is selected. Non-destructive and undoable. |
 | Pen | `P` | Click = corner, drag = curve, click first point = close, Enter/Esc = finish, Backspace = remove last point. |
@@ -100,7 +111,15 @@ with an Arabic keyboard layout.)
 
 | Area | Shortcut | Action |
 | ---- | -------- | ------ |
-| Tools | `V` `A` `B` `E` `P` `T` `M` `L` `\` `C` `H` `Z` | Select, Direct selection, Brush, Eraser, Pen, Text, Rectangle, Ellipse, Line, Crop, Hand, Zoom |
+| Tools | `V` `A` `B` `E` `P` `T` `M` `L` `\` `C` `H` `Z` | Selection, Direct selection, Brush, Eraser, Pen, Text, Rectangle, Ellipse, Line, Crop, Hand, Zoom |
+| | `Shift+V` | Group Selection |
+| | `Shift+O` | Artboard |
+| | `Shift+M` | Rectangular Marquee (press again: Elliptical Marquee) |
+| | `Q` | Lasso |
+| | `Shift+L` | Polygonal Lasso |
+| | `Alt+Shift+L` | Magnetic Lasso |
+| | `W` / `Shift+W` | Object Selection / Quick Selection |
+| | `Y` | Magic Wand |
 | | `Shift+C` | Perspective Crop |
 | | `I` | Eyedropper |
 | | `O` | Color Sampler |
@@ -114,13 +133,13 @@ with an Arabic keyboard layout.)
 | | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / Cut / Paste (images from the system clipboard too) |
 | | `Ctrl+J` or `Ctrl+D` | Duplicate |
 | | `Delete` / `Backspace` | Delete |
-| | `Ctrl+A` / `Ctrl+Shift+A` or `Esc` | Select all / Deselect |
+| | `Ctrl+A` / `Ctrl+Shift+A` or `Esc` | Select all / Deselect (with a marquee or lasso tool, `Ctrl+A` selects the whole artboard area) |
 | | Arrows / `Shift`+Arrows | Nudge 1 px / 10 px |
 | | `Enter` | Edit selected text, or its anchor points for paths |
 | Objects | `Ctrl+G` / `Ctrl+Shift+G` | Group / Ungroup |
 | | `Ctrl+]` / `Ctrl+[` | Bring forward / Send backward |
 | | `Ctrl+Shift+]` / `Ctrl+Shift+[` | Bring to front / Send to back |
-| Painting | `[` / `]` | Smaller / larger brush or eraser |
+| Painting | `[` / `]` | Smaller / larger brush, eraser, healing or quick-selection brush |
 | View | `Ctrl+=` / `Ctrl+-` | Zoom in / out |
 | | `Ctrl+0` / `Ctrl+1` / `Ctrl+2` | Fit / 100% / Zoom to selection |
 | | `Ctrl+R` / `Ctrl+;` | Toggle rulers / guides |
@@ -191,6 +210,27 @@ Flagged deliberately rather than left silent:
   colours plus matching grain — good for spots, dust and small objects on
   even backgrounds; it doesn't rebuild detailed patterns the way Photoshop's
   content-aware fill does.
+- **Region selections (marquee, lasso, quick selection) can't be edited *through* yet.**
+  They are real pixel-accurate selections — shown with marching ants, combinable
+  (Shift adds, Quick Selection's Alt subtracts), invertible, and usable for
+  *Crop to Selection* — but painting, erasing, deleting or copying don't yet
+  stay inside them (Delete shows a notice instead of deleting layers). They
+  cover the main artboard only, aren't part of undo/redo, and aren't saved in
+  the document. Tell us which operations matter most (delete pixels, fill,
+  copy to a new layer, restrict the brush…) for a follow-up.
+- **Artboards:** PNG export renders the main artboard only (all artboards are
+  listed in the JSON export). Rulers, snapping, "fit to screen" and the crop
+  tools refer to the main artboard; cropping removes the other artboards along
+  with everything outside the crop.
+- **Magic Wand and Object Selection work on layers**, not pixels: the wand
+  compares each layer's solid fill (or stroke) colour; images, groups, paint
+  layers and gradients have no single colour and are never matched.
+  "Touching" is judged from bounding boxes. Object Selection doesn't detect
+  subjects inside a photo (Photoshop's AI feature).
+- **Very large artboards:** Quick Selection and the Magnetic Lasso analyse the
+  rendered picture, which takes a moment on huge artboards (≈1 s per stroke at
+  4000 × 3000). Above 4096 × 4096 px, region selections are stored at a
+  slightly reduced resolution.
 - **Multi-selection** is limited to layers in the same group.
 - **SVG files** are imported as images, not as editable vectors. Very large
   photos are kept at full resolution (scaled to fit), which uses memory.

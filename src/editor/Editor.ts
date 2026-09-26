@@ -97,6 +97,29 @@ import { RulerTool } from './tools/RulerTool';
 import { CountTool } from './tools/CountTool';
 import { SpotHealingBrushTool } from './tools/SpotHealingBrushTool';
 import { HealingBrushTool } from './tools/HealingBrushTool';
+import { ArtboardTool } from './tools/ArtboardTool';
+import { RectMarqueeTool } from './tools/RectMarqueeTool';
+import { EllipseMarqueeTool } from './tools/EllipseMarqueeTool';
+import { SingleRowColumnMarqueeTool } from './tools/SingleRowColumnMarqueeTool';
+import { LassoTool } from './tools/LassoTool';
+import { PolygonalLassoTool } from './tools/PolygonalLassoTool';
+import { MagneticLassoTool } from './tools/MagneticLassoTool';
+import { ObjectSelectionTool } from './tools/ObjectSelectionTool';
+import { QuickSelectionTool } from './tools/QuickSelectionTool';
+import { MagicWandTool } from './tools/MagicWandTool';
+import { GroupSelectionTool } from './tools/GroupSelectionTool';
+import { PixelSelection, type CombineMode, type SelectionShape } from './pixelSelection';
+import { SelectionAnts } from './SelectionAnts';
+import { renderArtboardPixels, type ScenePixels } from './scenePixels';
+import {
+  ARTBOARD_LABEL_FONT,
+  PASTEBOARD_COLOR,
+  artboardsToDocument,
+  listArtboards,
+  MAIN_ARTBOARD_ID,
+  owningArtboard,
+  type ArtboardRect,
+} from './artboards';
 import { correctedSize, isValidQuad, type XY } from './perspective';
 import { perspectiveWarpLayers } from './perspectiveCrop';
 import { ClippingGroup } from '@erase2d/fabric';
@@ -109,11 +132,12 @@ export interface EditorOptions {
   layerLabels?: Partial<Record<LayerKind, string>>;
   /** Called after every undoable change (e.g. to autosave in the host app). */
   onChange?: () => void;
+  /** Localizes an i18n key for text the editor shows itself (confirmations, default names). */
+  translate?: (key: string, params?: Record<string, string | number>) => string;
 }
 
 export const MIN_ZOOM = 0.02;
 export const MAX_ZOOM = 64;
-const PASTEBOARD_COLOR = '#1b1b1f';
 const GUIDE_COLOR = '#16c6ff';
 const SNAP_COLOR = '#ff3d9a';
 const HOVER_COLOR = '#4d8dff';
@@ -128,6 +152,8 @@ export class Editor {
   readonly store: WorkspaceStore;
   readonly history = new History();
   readonly assets = new AssetRegistry();
+  /** The region ("marching ants") selection of the marquee/lasso tools. */
+  readonly pixelSelection = new PixelSelection();
 
   private readonly host: HTMLElement;
   private readonly canvasEl: HTMLCanvasElement;
@@ -141,6 +167,8 @@ export class Editor {
   private readonly resizeObserver: ResizeObserver;
   private readonly layerLabels: Partial<Record<LayerKind, string>>;
   private readonly onChange?: () => void;
+  /** Localizes an i18n key (see `EditorOptions.translate`). */
+  readonly translate: (key: string, params?: Record<string, string | number>) => string;
   private nameCounters: Partial<Record<LayerKind, number>> = {};
   private restoring = false;
   private clipboard: { objects: Record<string, unknown>[]; pasteCount: number } | null = null;
@@ -158,6 +186,11 @@ export class Editor {
   /** Object whose anchors are being edited with the Direct Selection tool. */
   private editingPath: FabricObject | null = null;
   private editingPathControls: FabricObject['controls'] | null = null;
+  private readonly ants: SelectionAnts;
+  private readonly unsubscribeStore: () => void;
+  /** Artboards drawn instead of the document's while the Artboard tool drags one. */
+  private artboardPreview: ArtboardRect[] | null = null;
+  private labelMeasure: CanvasRenderingContext2D | null = null;
 
   constructor(options: EditorOptions) {
     configureFabric();
@@ -165,6 +198,7 @@ export class Editor {
     this.store = options.store;
     this.layerLabels = options.layerLabels ?? {};
     this.onChange = options.onChange;
+    this.translate = options.translate ?? ((key) => key);
 
     this.canvasEl = document.createElement('canvas');
     this.host.appendChild(this.canvasEl);
@@ -195,6 +229,18 @@ export class Editor {
     this.brushCursor.className = 'sw-brush-cursor';
     this.host.appendChild(this.brushCursor);
 
+    this.pixelSelection.fit(this.doc.width, this.doc.height);
+    this.ants = new SelectionAnts(this.host, this.pixelSelection, () => this.canvas.viewportTransform);
+    // The region selection covers the main artboard: resizing the artboard
+    // (canvas size, crop, undo…) clears it.
+    this.unsubscribeStore = this.store.subscribe((s, prev) => {
+      if (s.doc.width !== prev.doc.width || s.doc.height !== prev.doc.height) {
+        const had = !this.pixelSelection.isEmpty;
+        this.pixelSelection.fit(s.doc.width, s.doc.height);
+        if (had) this.publishPixelSelection();
+      }
+    });
+
     this.tools = {
       select: new SelectTool(this),
       direct: new DirectSelectTool(this),
@@ -216,6 +262,17 @@ export class Editor {
       count: new CountTool(this),
       spotHealingBrush: new SpotHealingBrushTool(this),
       healingBrush: new HealingBrushTool(this),
+      artboard: new ArtboardTool(this),
+      rectMarquee: new RectMarqueeTool(this),
+      ellipseMarquee: new EllipseMarqueeTool(this),
+      singleRowColumnMarquee: new SingleRowColumnMarqueeTool(this),
+      lasso: new LassoTool(this),
+      polygonalLasso: new PolygonalLassoTool(this),
+      magneticLasso: new MagneticLassoTool(this),
+      objectSelection: new ObjectSelectionTool(this),
+      quickSelection: new QuickSelectionTool(this),
+      magicWand: new MagicWandTool(this),
+      groupSelection: new GroupSelectionTool(this),
     };
 
     this.bindCanvasEvents();
@@ -236,6 +293,8 @@ export class Editor {
     this.tool.deactivate();
     cancelAnimationFrame(this.selectionSyncHandle);
     this.resizeObserver.disconnect();
+    this.unsubscribeStore();
+    this.ants.dispose();
     // Remove Fabric's DOM right away (dispose() itself is asynchronous).
     const wrapper = (this.canvas as unknown as { wrapperEl?: HTMLElement }).wrapperEl;
     void this.canvas.dispose().then(() => this.canvasEl.remove());
@@ -467,6 +526,7 @@ export class Editor {
     if (w === this.canvas.width && h === this.canvas.height && this.hasFitted) return;
     const oldCenter = new Point(this.canvas.width / 2, this.canvas.height / 2);
     this.canvas.setDimensions({ width: w, height: h });
+    this.ants.resize(w, h);
     if (!this.hasFitted && w > 10 && h > 10) {
       this.hasFitted = true;
       this.fitToScreen();
@@ -537,6 +597,7 @@ export class Editor {
 
   private onViewportChanged() {
     this.set({ zoom: this.canvas.getZoom(), viewportVersion: this.state.viewportVersion + 1 });
+    this.ants.update();
     this.tool.onOptionsChanged();
     this.canvas.requestRenderAll();
   }
@@ -575,29 +636,66 @@ export class Editor {
   }
 
   private renderBackdrop(ctx: CanvasRenderingContext2D) {
-    const { width, height, background } = this.doc;
+    const { background } = this.doc;
     const v = this.canvas.viewportTransform;
     ctx.save();
     ctx.fillStyle = PASTEBOARD_COLOR;
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    const x = v[4];
-    const y = v[5];
-    const w = width * v[0];
-    const h = height * v[3];
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-    ctx.shadowBlur = 18;
-    ctx.shadowOffsetY = 2;
-    if (background) {
-      ctx.fillStyle = background;
-      ctx.fillRect(x, y, w, h);
-    } else {
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(x, y, w, h);
-      ctx.shadowColor = 'transparent';
-      ctx.fillStyle = this.getCheckerPattern(ctx) ?? '#fff';
-      ctx.fillRect(x, y, w, h);
+    const artboards = this.getArtboards();
+    for (const a of artboards) {
+      const x = a.x * v[0] + v[4];
+      const y = a.y * v[3] + v[5];
+      const w = a.width * v[0];
+      const h = a.height * v[3];
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetY = 2;
+      if (background) {
+        ctx.fillStyle = background;
+        ctx.fillRect(x, y, w, h);
+      } else {
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x, y, w, h);
+        ctx.shadowColor = 'transparent';
+        ctx.fillStyle = this.getCheckerPattern(ctx) ?? '#fff';
+        ctx.fillRect(x, y, w, h);
+      }
+      ctx.restore();
+    }
+    // Artboard names (only once there is more than one, or with the Artboard tool).
+    if (artboards.length > 1 || this.activeToolId === 'artboard') {
+      ctx.font = ARTBOARD_LABEL_FONT;
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.62)';
+      for (const a of artboards) {
+        const box = this.artboardLabelBox(a);
+        ctx.fillText(box.text, box.x, box.y + box.h - 3);
+      }
     }
     ctx.restore();
+  }
+
+  /**
+   * Where an artboard's name label is drawn (viewport coordinates): just
+   * above its top-left corner, truncated to the artboard's on-screen width.
+   */
+  artboardLabelBox(a: ArtboardRect): { x: number; y: number; w: number; h: number; text: string } {
+    const v = this.canvas.viewportTransform;
+    if (!this.labelMeasure) this.labelMeasure = document.createElement('canvas').getContext('2d');
+    const m = this.labelMeasure;
+    const maxW = Math.max(40, a.width * v[0]);
+    let text = a.name || ' ';
+    if (m) {
+      m.font = ARTBOARD_LABEL_FONT;
+      if (m.measureText(text).width > maxW) {
+        while (text.length > 1 && m.measureText(text + '…').width > maxW) text = text.slice(0, -1);
+        text += '…';
+      }
+    }
+    const w = m ? m.measureText(text).width : text.length * 6;
+    const h = 16;
+    return { x: a.x * v[0] + v[4], y: a.y * v[3] + v[5] - h - 2, w, h, text };
   }
 
   private renderOverlay(ctx: CanvasRenderingContext2D, isMain: boolean) {
@@ -803,6 +901,164 @@ export class Editor {
     this.canvas.discardActiveObject();
     this.handleSelectionChange();
     this.canvas.requestRenderAll();
+  }
+
+  /** Top-most visible, unlocked top-level layer under a scene point. */
+  layerAt(point: Point): FabricObject | null {
+    const objs = this.canvas.getObjects();
+    for (let i = objs.length - 1; i >= 0; i--) {
+      const o = objs[i];
+      if (!o.visible || isEffectivelyLocked(o)) continue;
+      o.setCoords();
+      if (o.containsPoint(point)) return o;
+    }
+    return null;
+  }
+
+  // =========================================================================
+  // Region (pixel) selection — marquee, lasso and quick-selection tools
+  // =========================================================================
+
+  /** Adds, subtracts or replaces the region selection with a shape (artboard coordinates). */
+  selectRegion(shape: SelectionShape, mode: CombineMode) {
+    this.pixelSelection.fit(this.doc.width, this.doc.height);
+    this.pixelSelection.combine(shape, mode);
+    this.publishPixelSelection();
+  }
+
+  /** Replaces the region selection with a mask (see `PixelSelection`). */
+  setRegionMask(mask: Uint8Array) {
+    this.pixelSelection.setMask(mask);
+    this.publishPixelSelection();
+  }
+
+  clearPixelSelection() {
+    if (this.pixelSelection.isEmpty) return;
+    this.pixelSelection.clear();
+    this.publishPixelSelection();
+  }
+
+  invertPixelSelection() {
+    this.pixelSelection.fit(this.doc.width, this.doc.height);
+    this.pixelSelection.invert();
+    this.publishPixelSelection();
+  }
+
+  /** Crops the artboard to the region selection's bounding box (uses the regular crop). */
+  cropToPixelSelection() {
+    const b = this.pixelSelection.bounds();
+    if (!b) return;
+    this.pixelSelection.clear();
+    this.publishPixelSelection();
+    this.cropArtboard({ x: b.x, y: b.y, w: b.width, h: b.height });
+  }
+
+  /** Pushes the region selection's bounds to the UI and redraws the marching ants. */
+  publishPixelSelection() {
+    const b = this.pixelSelection.bounds();
+    const r = (n: number) => Math.round(n * 100) / 100;
+    this.set({ pixelSelection: b ? { x: r(b.x), y: r(b.y), width: r(b.width), height: r(b.height) } : null });
+    this.ants.update();
+  }
+
+  /** The main artboard rendered at the region selection's resolution. */
+  renderArtboardPixels(): ScenePixels {
+    this.pixelSelection.fit(this.doc.width, this.doc.height);
+    return renderArtboardPixels(this.canvas.getObjects(), this.doc, this.pixelSelection.width, this.pixelSelection.height);
+  }
+
+  // =========================================================================
+  // Artboards
+  // =========================================================================
+
+  /** Element holding the canvas (tools attach temporary DOM, e.g. the rename field). */
+  get canvasHost(): HTMLElement {
+    return this.host;
+  }
+
+  /** Localized base name for new artboards ("Artboard" → "Artboard 2"). */
+  get artboardLabel(): string {
+    const label = this.translate('artboard.defaultName');
+    return label === 'artboard.defaultName' ? 'Artboard' : label;
+  }
+
+  /** Every artboard, main first (the Artboard tool's live preview while dragging). */
+  getArtboards(): ArtboardRect[] {
+    return this.artboardPreview ?? listArtboards(this.doc);
+  }
+
+  /** Shows `list` instead of the document's artboards until cleared (live drag preview). */
+  setArtboardPreview(list: ArtboardRect[] | null) {
+    this.artboardPreview = list;
+    this.canvas.requestRenderAll();
+  }
+
+  /** Top-level layers that belong to an artboard (their centre is on it). */
+  artboardContents(id: string, list: ArtboardRect[] = listArtboards(this.doc)): FabricObject[] {
+    return this.canvas.getObjects().filter((o) => {
+      o.setCoords();
+      return owningArtboard(list, o.getBoundingRect())?.id === id;
+    });
+  }
+
+  /**
+   * Stores a new set of artboards (main first) as one undoable step. The
+   * main artboard always sits at (0, 0): if it was moved, the rest of the
+   * scene (layers, guides, other artboards) is shifted the other way and the
+   * view follows, so nothing appears to jump on screen.
+   */
+  applyArtboards(list: ArtboardRect[], label: string) {
+    this.artboardPreview = null;
+    const main = list[0];
+    const dx = Math.round(main.x);
+    const dy = Math.round(main.y);
+    const next = list.map((a) => ({
+      ...a,
+      x: Math.round(a.x) - dx,
+      y: Math.round(a.y) - dy,
+      width: Math.max(1, Math.min(10000, Math.round(a.width))),
+      height: Math.max(1, Math.min(10000, Math.round(a.height))),
+    }));
+    let guides = this.state.guides;
+    if (dx || dy) {
+      const active = this.canvas.getActiveObjects();
+      this.canvas.discardActiveObject();
+      for (const o of this.canvas.getObjects()) {
+        o.set({ left: o.left - dx, top: o.top - dy });
+        o.setCoords();
+      }
+      guides = { vertical: guides.vertical.map((x) => x - dx), horizontal: guides.horizontal.map((y) => y - dy) };
+      const z = this.canvas.getZoom();
+      this.canvas.relativePan(new Point(dx * z, dy * z));
+      this.selectObjects(active);
+    }
+    this.set({ doc: artboardsToDocument(this.doc, next), guides });
+    this.onViewportChanged();
+    this.commit(label);
+  }
+
+  /**
+   * Deletes an artboard together with the layers on it (one undoable step).
+   * Deleting the main artboard makes the next one the main artboard. The
+   * last remaining artboard can't be deleted.
+   */
+  deleteArtboard(id: string): boolean {
+    const list = listArtboards(this.doc);
+    if (list.length < 2) {
+      this.notify('toast.artboardLast', 'warning');
+      return false;
+    }
+    const contents = this.artboardContents(id, list);
+    this.exitTextEditing();
+    this.stopPathEditing();
+    this.canvas.discardActiveObject();
+    this.closeGroups();
+    if (contents.length) this.canvas.remove(...contents);
+    const rest = list.filter((a) => a.id !== id);
+    if (id === MAIN_ARTBOARD_ID) rest[0] = { ...rest[0], id: MAIN_ARTBOARD_ID };
+    this.handleSelectionChange();
+    this.applyArtboards(rest, 'Delete artboard');
+    return true;
   }
 
   /** Makes the ancestors of `obj` interactive so the child can be transformed on canvas. */
@@ -1554,8 +1810,11 @@ export class Editor {
       o.setCoords();
     }
     const g = this.state.guides;
+    const doc: DocumentSettings = { ...this.doc, width: w, height: h };
+    // Other artboards stay with their artwork.
+    if (doc.artboards) doc.artboards = doc.artboards.map((a) => ({ ...a, x: a.x + dx, y: a.y + dy }));
     this.set({
-      doc: { ...this.doc, width: w, height: h },
+      doc,
       guides: { vertical: g.vertical.map((x) => x + dx), horizontal: g.horizontal.map((y) => y + dy) },
     });
     this.selectObjects(active);
@@ -1590,8 +1849,11 @@ export class Editor {
       obj.setCoords();
     }
     const g = this.state.guides;
+    // Everything outside the crop is discarded — other artboards included.
+    const { artboards: _dropped, ...docRest } = this.doc;
+    void _dropped;
     this.set({
-      doc: { ...this.doc, width: w, height: h },
+      doc: { ...docRest, width: w, height: h },
       guides: {
         vertical: g.vertical.map((v) => v - x).filter((v) => v >= 0 && v <= w),
         horizontal: g.horizontal.map((v) => v - y).filter((v) => v >= 0 && v <= h),
@@ -1684,7 +1946,10 @@ export class Editor {
     layers.forEach((o) => applyLockState(o));
     if (layers.length) this.canvas.add(...layers);
     // Guides can't follow a perspective change, so they are cleared.
-    this.set({ doc: { ...this.doc, width, height }, guides: { vertical: [], horizontal: [] } });
+    // Everything outside the crop is discarded — other artboards included.
+    const { artboards: _dropped, ...docRest } = this.doc;
+    void _dropped;
+    this.set({ doc: { ...docRest, width, height }, guides: { vertical: [], horizontal: [] } });
     this.handleSelectionChange();
     this.fitToScreen();
     this.commit('Perspective crop');
@@ -2009,6 +2274,7 @@ export class Editor {
       const { units: _units, ...docSettings } = docData.document;
       void _units;
       this.set({ doc: docSettings, guides: docData.guides ?? { vertical: [], horizontal: [] } });
+      this.clearPixelSelection();
       this.resetNameCounters();
     } finally {
       this.restoring = false;
@@ -2025,7 +2291,10 @@ export class Editor {
     this.stopPathEditing();
     this.canvas.discardActiveObject();
     this.canvas.remove(...this.canvas.getObjects());
-    this.set({ doc: { ...this.doc, ...settings }, guides: { vertical: [], horizontal: [] } });
+    const { artboards: _old, ...docRest } = this.doc;
+    void _old;
+    this.set({ doc: { ...docRest, ...settings }, guides: { vertical: [], horizontal: [] } });
+    this.clearPixelSelection();
     this.nameCounters = {};
     this.history.reset(this.takeSnapshot('New document'));
     this.syncAll();
@@ -2091,8 +2360,13 @@ export class Editor {
           this.redo();
           return true;
         case 'a':
-          if (e.shiftKey) this.clearSelection();
-          else this.selectAll();
+          if (e.shiftKey) {
+            this.clearSelection();
+            this.clearPixelSelection();
+          } else if (this.tool.selectsRegion) {
+            // With a marquee/lasso tool, Select All selects the whole artboard area.
+            this.selectRegion({ type: 'rect', x: 0, y: 0, w: this.doc.width, h: this.doc.height }, 'replace');
+          } else this.selectAll();
           return true;
         case 'c':
           this.copySelection();
@@ -2198,15 +2472,33 @@ export class Editor {
       r: 'ruler',
       n: 'count',
       j: 'spotHealingBrush',
+      q: 'lasso',
+      w: 'objectSelection',
+      y: 'magicWand',
     };
-    // Shift+J: Healing Brush (plain J is the Spot Healing Brush, as in Photoshop).
-    if (lower === 'j' && e.shiftKey && !e.altKey) {
-      this.setTool('healingBrush');
+    // Shift+letter tools (the plain letter belongs to a sibling tool).
+    const shiftToolKeys: Record<string, ToolId> = {
+      j: 'healingBrush', // J = Spot Healing Brush, as in Photoshop
+      c: 'perspectiveCrop', // C = Crop
+      v: 'groupSelection', // V = Selection
+      o: 'artboard', // O = Color Sampler; Shift+O = Artboard, as in Illustrator
+      l: 'polygonalLasso', // L = Ellipse; the Lasso is Q (Illustrator)
+      w: 'quickSelection', // W = Object Selection
+    };
+    // Alt+Shift+L: Magnetic Lasso.
+    if (lower === 'l' && e.shiftKey && e.altKey) {
+      this.setTool('magneticLasso');
       return true;
     }
-    // Shift+C: Perspective Crop (plain C is the regular Crop tool).
-    if (lower === 'c' && e.shiftKey && !e.altKey) {
-      this.setTool('perspectiveCrop');
+    // Shift+M: Rectangular Marquee; pressed again, it switches to the
+    // Elliptical Marquee and back (Photoshop's Shift+M cycling). Plain M is
+    // the Rectangle shape tool.
+    if (lower === 'm' && e.shiftKey && !e.altKey) {
+      this.setTool(this.activeToolId === 'rectMarquee' ? 'ellipseMarquee' : 'rectMarquee');
+      return true;
+    }
+    if (e.shiftKey && !e.altKey && shiftToolKeys[lower]) {
+      this.setTool(shiftToolKeys[lower]);
       return true;
     }
     if (!e.altKey && toolKeys[lower]) {
@@ -2240,14 +2532,16 @@ export class Editor {
     this.endSpringTool();
   }
 
-  /** `[` / `]` resize the brush, eraser or healing brush (Photoshop convention). */
+  /** `[` / `]` resize the brush, eraser, healing or quick-selection brush (Photoshop convention). */
   adjustBrushSize(direction: 1 | -1) {
     const tool =
       this.activeToolId === 'eraser'
         ? 'eraser'
         : this.activeToolId === 'spotHealingBrush' || this.activeToolId === 'healingBrush'
           ? 'spotHealingBrush' // both healing brushes share one size
-          : 'brush';
+          : this.activeToolId === 'quickSelection'
+            ? 'quickSelection'
+            : 'brush';
     const size = this.toolOptions[tool].size;
     const step = size < 10 ? 1 : size < 50 ? 5 : size < 100 ? 10 : 25;
     this.updateToolOptions(tool, { size: Math.max(1, Math.min(500, size + direction * step)) });

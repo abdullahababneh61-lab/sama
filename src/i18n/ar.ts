@@ -10,6 +10,7 @@ export const ar: Partial<Record<StringKey, string>> = {
 
   'toolbar.label': 'الأدوات',
   'tool.select': 'نقل / تحديد',
+  'tool.selection': 'نقل / تحديد',
   'tool.direct': 'التحديد المباشر',
   'tool.hand': 'اليد',
   'tool.zoom': 'التكبير',
@@ -24,6 +25,7 @@ export const ar: Partial<Record<StringKey, string>> = {
   'tool.image': 'استيراد صورة',
 
   'hint.select': 'انقر للتحديد · Shift+نقر للإضافة · Ctrl/⌘+نقر داخل المجموعات · Alt+سحب للنسخ',
+  'hint.selection': 'انقر للتحديد · Shift+نقر للإضافة · Ctrl/⌘+نقر داخل المجموعات · Alt+سحب للنسخ',
   'hint.direct': 'انقر على مسار لإظهار نقاط الارتكاز · اسحب النقاط والمقابض',
   'hint.hand': 'اسحب للتحريك · أو اضغط مطولاً على المسافة مع أي أداة',
   'hint.zoom': 'انقر للتكبير · Alt+نقر للتصغير',
