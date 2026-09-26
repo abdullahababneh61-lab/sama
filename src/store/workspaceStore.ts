@@ -16,6 +16,7 @@
 import { createStore } from 'zustand/vanilla';
 import type {
   ColorSample,
+  CountMarker,
   DocumentSettings,
   Guides,
   LayerNode,
@@ -51,6 +52,10 @@ export interface WorkspaceState {
   colorSamples: ColorSample[];
   /** Whether the Color Sampler's points and panel are shown (Esc hides them). */
   colorSamplerVisible: boolean;
+  /** Count tool markers in placement order (a viewing aid, like color samples). */
+  countMarkers: CountMarker[];
+  /** Whether the Count tool's markers are shown (Esc hides them). */
+  countVisible: boolean;
 }
 
 export const DEFAULT_TOOL_OPTIONS: ToolOptions = {
@@ -97,6 +102,8 @@ export function createWorkspaceStore(init?: Partial<WorkspaceState>) {
     editingPathId: null,
     colorSamples: [],
     colorSamplerVisible: true,
+    countMarkers: [],
+    countVisible: true,
     ...init,
   }));
 }

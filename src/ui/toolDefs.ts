@@ -7,6 +7,7 @@ import {
   Eraser,
   Hand,
   Hexagon,
+  ListOrdered,
   MousePointer,
   MousePointer2,
   PenTool,
@@ -55,6 +56,7 @@ export const TOOL_GROUPS: ToolDef[][] = [
     { id: 'eyedropper', icon: Pipette, shortcut: 'I' },
     { id: 'colorSampler', icon: Target, shortcut: 'O' },
     { id: 'ruler', icon: Ruler, shortcut: 'R' },
+    { id: 'count', icon: ListOrdered, shortcut: 'N' },
   ],
 ];
 

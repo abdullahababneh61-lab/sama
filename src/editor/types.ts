@@ -24,7 +24,8 @@ export type ToolId =
   | 'perspectiveCrop'
   | 'eyedropper'
   | 'colorSampler'
-  | 'ruler';
+  | 'ruler'
+  | 'count';
 
 /** Tools that create shapes by dragging on the canvas. */
 export type ShapeToolId = Extract<ToolId, 'rect' | 'ellipse' | 'line' | 'polygon'>;
@@ -219,4 +220,11 @@ export interface ColorSample {
   y: number;
   /** Colour under the point (#rrggbb), or null where nothing is visible. */
   color: string | null;
+}
+
+/** A Count tool marker, in artboard coordinates. Its number is its list position + 1. */
+export interface CountMarker {
+  id: string;
+  x: number;
+  y: number;
 }

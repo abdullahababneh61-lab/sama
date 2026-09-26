@@ -570,3 +570,47 @@ test.describe('ruler tool', () => {
     expectNoErrors(errors);
   });
 });
+
+test.describe('count tool', () => {
+  test('N counts clicks; drag keeps numbers; Alt+click removes and renumbers; Escape keeps markers', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    const markers = () =>
+      page.evaluate(() => (window as any).samaEditor.store.getState().countMarkers.map((m: any) => [Math.round(m.x), Math.round(m.y)]));
+    await page.keyboard.press('n');
+    expect((await workspaceState(page)).tool).toBe('count');
+    const pts: [number, number][] = [
+      [100, 100],
+      [300, 100],
+      [500, 100],
+      [700, 100],
+      [900, 100],
+    ];
+    for (const [x, y] of pts) await clickAt(page, x, y);
+    await expect(page.getByTestId('count-total')).toHaveText('5');
+
+    // Drag marker 2 down: it stays number 2.
+    await drag(page, [300, 100], [300, 400]);
+    let m = await markers();
+    expect(m).toHaveLength(5);
+    expect(Math.abs(m[1][1] - 400)).toBeLessThan(3);
+
+    // Alt+click marker 3 (at 500,100): 4 and 5 move up to 3 and 4.
+    await clickAt(page, 500, 100, ['Alt']);
+    m = await markers();
+    expect(m).toHaveLength(4);
+    expect(Math.abs(m[2][0] - 700)).toBeLessThan(3); // old #4 is now #3
+    expect(Math.abs(m[3][0] - 900)).toBeLessThan(3);
+    await expect(page.getByTestId('count-total')).toHaveText('4');
+
+    // Escape hides but keeps them; nothing is added to layers or undo.
+    await page.keyboard.press('Escape');
+    expect(await markers()).toHaveLength(4);
+    const s = await workspaceState(page);
+    expect(s.layers).toHaveLength(0);
+    expect(s.history.labels).toEqual(['New document']);
+    await page.keyboard.press('v');
+    await page.keyboard.press('n');
+    await expect(page.getByTestId('count-total')).toHaveText('4');
+    expectNoErrors(errors);
+  });
+});

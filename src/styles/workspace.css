@@ -1597,3 +1597,15 @@
   background: var(--sw-hover);
   color: var(--sw-text);
 }
+
+/* Count tool total in the options bar */
+.sw-count-total {
+  min-width: 28px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #e5484d;
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}

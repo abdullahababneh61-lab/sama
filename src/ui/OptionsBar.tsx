@@ -15,6 +15,7 @@ import {
   Ungroup,
 } from 'lucide-react';
 import { useEditor, useWorkspace } from '../workspace/context';
+import type { CountTool } from '../editor/tools/CountTool';
 import { useT } from '../i18n';
 import { NumberField } from './controls/NumberField';
 import { Slider } from './controls/Slider';
@@ -46,6 +47,8 @@ export function OptionsBar() {
       case 'hand':
       case 'zoom':
         return <ViewOptions />;
+      case 'count':
+        return <CountOptions />;
     }
   })();
   return (
@@ -206,6 +209,28 @@ function ViewOptions() {
       </button>
       <button type="button" className="sw-btn sw-btn--ghost" onClick={() => editor?.zoomToSelection()}>
         {t('menu.zoomSelection')}
+      </button>
+    </div>
+  );
+}
+
+function CountOptions() {
+  const editor = useEditor();
+  const t = useT();
+  const total = useWorkspace((s) => s.countMarkers.length);
+  return (
+    <div className="sw-options__group">
+      <span className="sw-options__caption">{t('count.total')}</span>
+      <span className="sw-count-total" data-testid="count-total">
+        {total}
+      </span>
+      <button
+        type="button"
+        className="sw-btn sw-btn--ghost"
+        disabled={!total}
+        onClick={() => editor?.getTool<CountTool>('count').clearMarkers()}
+      >
+        {t('count.clear')}
       </button>
     </div>
   );

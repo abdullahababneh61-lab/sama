@@ -40,6 +40,7 @@ export const SHORTCUT_REFERENCE: ShortcutGroup[] = [
       { keys: 'I', label: 'tool.eyedropper' },
       { keys: 'O', label: 'tool.colorSampler' },
       { keys: 'R', label: 'tool.ruler' },
+      { keys: 'N', label: 'tool.count' },
     ],
   },
   {

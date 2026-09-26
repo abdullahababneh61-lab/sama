@@ -61,6 +61,7 @@ existing Chromium: `CHROMIUM_PATH=/path/to/chrome npm run test:e2e`.)
 | Eyedropper | `I` | A swatch next to the pointer previews the colour under it. Click sets the fill colour of the shape tools, pen, text and brush; Alt+click sets the stroke colour of the shape tools and pen. Returns to the previous tool after a pick; Esc cancels. |
 | Color Sampler | `O` | Click to place up to 4 numbered sample points; a floating panel shows each point's colour (swatch, hex, RGB) and updates as the artwork changes. Drag a point to move it, Alt+click to remove it, Esc to hide them (they're kept). Doesn't change the active colours. |
 | Ruler | `R` | Drag to measure: a label shows the length (px) and angle from horizontal (counter-clockwise positive, as in Photoshop). Shift snaps to 45°; drag either end to adjust; Esc clears. The line is an on-screen measurement, not a layer. |
+| Count | `N` | Click each item to count it: numbered markers (1, 2, 3…) with the running total in the options bar. Drag a marker to move it; Alt+click removes it and renumbers the rest; Esc hides the markers (they're kept); Clear all removes them. |
 | Hand | `H` or hold `Space` | Pan. Scroll also pans; `Ctrl`/`⌘`+scroll zooms. |
 | Zoom | `Z` | Click zooms in, Alt+click zooms out. |
 | Image import | toolbar button, `Ctrl+Shift+I`, drag-and-drop, paste | PNG/JPEG/WebP/GIF/SVG (SVG is imported as an image). |
@@ -101,6 +102,7 @@ with an Arabic keyboard layout.)
 | | `Shift+C` | Perspective Crop |
 | | `I` | Eyedropper |
 | | `O` | Color Sampler |
+| | `N` | Count |
 | | `R` | Ruler (`Ctrl+R` still toggles the rulers along the canvas edges) |
 | | `U` | Cycle shape tools (rectangle → ellipse → line → polygon) |
 | | hold `Space` | Temporary hand tool |
