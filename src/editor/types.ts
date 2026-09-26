@@ -25,7 +25,8 @@ export type ToolId =
   | 'eyedropper'
   | 'colorSampler'
   | 'ruler'
-  | 'count';
+  | 'count'
+  | 'spotHealingBrush';
 
 /** Tools that create shapes by dragging on the canvas. */
 export type ShapeToolId = Extract<ToolId, 'rect' | 'ellipse' | 'line' | 'polygon'>;
@@ -132,6 +133,8 @@ export interface TextOptions {
 export interface ToolOptions {
   brush: BrushOptions;
   eraser: EraserOptions;
+  /** Spot Healing Brush: same size setting as the eraser. */
+  spotHealingBrush: EraserOptions;
   shape: ShapeOptions;
   pen: PenOptions;
   text: TextOptions;

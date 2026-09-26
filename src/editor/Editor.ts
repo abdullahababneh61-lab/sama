@@ -95,6 +95,7 @@ import { EyedropperTool } from './tools/EyedropperTool';
 import { ColorSamplerTool } from './tools/ColorSamplerTool';
 import { RulerTool } from './tools/RulerTool';
 import { CountTool } from './tools/CountTool';
+import { SpotHealingBrushTool } from './tools/SpotHealingBrushTool';
 import { correctedSize, isValidQuad, type XY } from './perspective';
 import { perspectiveWarpLayers } from './perspectiveCrop';
 import { ClippingGroup } from '@erase2d/fabric';
@@ -212,6 +213,7 @@ export class Editor {
       colorSampler: new ColorSamplerTool(this),
       ruler: new RulerTool(this),
       count: new CountTool(this),
+      spotHealingBrush: new SpotHealingBrushTool(this),
     };
 
     this.bindCanvasEvents();
@@ -2193,6 +2195,7 @@ export class Editor {
       o: 'colorSampler',
       r: 'ruler',
       n: 'count',
+      j: 'spotHealingBrush',
     };
     // Shift+C: Perspective Crop (plain C is the regular Crop tool).
     if (lower === 'c' && e.shiftKey && !e.altKey) {
@@ -2230,9 +2233,10 @@ export class Editor {
     this.endSpringTool();
   }
 
-  /** `[` / `]` resize the brush or eraser (Photoshop convention). */
+  /** `[` / `]` resize the brush, eraser or healing brush (Photoshop convention). */
   adjustBrushSize(direction: 1 | -1) {
-    const tool = this.activeToolId === 'eraser' ? 'eraser' : 'brush';
+    const tool =
+      this.activeToolId === 'eraser' ? 'eraser' : this.activeToolId === 'spotHealingBrush' ? 'spotHealingBrush' : 'brush';
     const size = this.toolOptions[tool].size;
     const step = size < 10 ? 1 : size < 50 ? 5 : size < 100 ? 10 : 25;
     this.updateToolOptions(tool, { size: Math.max(1, Math.min(500, size + direction * step)) });

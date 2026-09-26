@@ -41,6 +41,7 @@ export const SHORTCUT_REFERENCE: ShortcutGroup[] = [
       { keys: 'O', label: 'tool.colorSampler' },
       { keys: 'R', label: 'tool.ruler' },
       { keys: 'N', label: 'tool.count' },
+      { keys: 'J', label: 'tool.spotHealingBrush' },
     ],
   },
   {

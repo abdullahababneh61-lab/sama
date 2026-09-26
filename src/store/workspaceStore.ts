@@ -61,6 +61,7 @@ export interface WorkspaceState {
 export const DEFAULT_TOOL_OPTIONS: ToolOptions = {
   brush: { size: 12, color: '#1f1f24', opacity: 1, hardness: 0.9, smoothing: 2 },
   eraser: { size: 24 },
+  spotHealingBrush: { size: 30 },
   shape: { fill: '#d9d9d9', stroke: null, strokeWidth: 2, cornerRadius: 0, sides: 6 },
   pen: { fill: null, stroke: '#1f1f24', strokeWidth: 2 },
   text: {

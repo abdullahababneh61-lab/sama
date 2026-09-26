@@ -1,5 +1,6 @@
 /** Toolbar definitions: icon, label key and shortcut for every tool. */
 import {
+  Bandage,
   Brush,
   Circle,
   Crop,
@@ -37,6 +38,7 @@ export const TOOL_GROUPS: ToolDef[][] = [
   [
     { id: 'brush', icon: Brush, shortcut: 'B' },
     { id: 'eraser', icon: Eraser, shortcut: 'E' },
+    { id: 'spotHealingBrush', icon: Bandage, shortcut: 'J' },
     { id: 'pen', icon: PenTool, shortcut: 'P' },
     { id: 'text', icon: Type, shortcut: 'T' },
   ],

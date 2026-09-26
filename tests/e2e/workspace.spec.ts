@@ -614,3 +614,61 @@ test.describe('count tool', () => {
     expectNoErrors(errors);
   });
 });
+
+test.describe('spot healing brush', () => {
+  test('J heals a blemish on an image layer; Escape cancels; vectors show a notice; undo restores', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    const png = await page.evaluate(() => {
+      const c = document.createElement('canvas');
+      c.width = 400;
+      c.height = 300;
+      const x = c.getContext('2d')!;
+      x.fillStyle = '#e0b090';
+      x.fillRect(0, 0, 400, 300);
+      x.fillStyle = '#301810';
+      x.beginPath();
+      x.arc(200, 150, 12, 0, Math.PI * 2);
+      x.fill();
+      return c.toDataURL('image/png').split(',')[1];
+    });
+    await page.setInputFiles('[data-testid=image-input]', { name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
+    await page.waitForTimeout(500);
+    const centre = () =>
+      page.evaluate(() => {
+        const img = (window as any).samaEditor.canvas.getObjects()[0];
+        const el = img.getElement();
+        const c = document.createElement('canvas');
+        c.width = el.naturalWidth;
+        c.height = el.naturalHeight;
+        const x = c.getContext('2d', { willReadFrequently: true })!;
+        x.drawImage(el, 0, 0);
+        return [...x.getImageData(200, 150, 1, 1).data];
+      });
+    expect(await centre()).toEqual([48, 24, 16, 255]);
+
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('j');
+    expect((await workspaceState(page)).tool).toBe('spotHealingBrush');
+    // The image (400×300) is centred on the 1080 artboard: blemish at (540, 540).
+    await page.evaluate(() => (window as any).samaEditor.updateToolOptions('spotHealingBrush', { size: 40 }));
+    await drag(page, [530, 540], [550, 540], 5);
+    await expect.poll(async () => (await workspaceState(page)).history.labels.at(-1)).toBe('Spot healing');
+    const healed = await centre();
+    expect(Math.abs(healed[0] - 0xe0)).toBeLessThan(4);
+    expect(Math.abs(healed[1] - 0xb0)).toBeLessThan(4);
+    expect(Math.abs(healed[2] - 0x90)).toBeLessThan(4);
+
+    await page.keyboard.press('Control+z');
+    await settle(page);
+    expect(await centre()).toEqual([48, 24, 16, 255]);
+
+    // Vector content can't be healed.
+    await page.keyboard.press('m');
+    await drag(page, [100, 100], [250, 250]);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('j');
+    await drag(page, [150, 150], [200, 200]);
+    expect(await page.evaluate(() => (window as any).samaEditor.store.getState().toast?.message)).toBe('toast.spotHealNoImage');
+    expectNoErrors(errors);
+  });
+});

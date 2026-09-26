@@ -49,6 +49,8 @@ export function OptionsBar() {
         return <ViewOptions />;
       case 'count':
         return <CountOptions />;
+      case 'spotHealingBrush':
+        return <SpotHealOptions />;
     }
   })();
   return (
@@ -232,6 +234,18 @@ function CountOptions() {
       >
         {t('count.clear')}
       </button>
+    </div>
+  );
+}
+
+function SpotHealOptions() {
+  const editor = useEditor();
+  const t = useT();
+  const o = useWorkspace((s) => s.toolOptions.spotHealingBrush);
+  return (
+    <div className="sw-options__group">
+      <NumberField label={t('options.size')} value={o.size} min={1} max={500} suffix="px" width={96} onChange={(v) => editor?.updateToolOptions('spotHealingBrush', { size: v })} />
+      <span className="sw-options__caption">{t('options.spotHealImagesOnly')}</span>
     </div>
   );
 }
