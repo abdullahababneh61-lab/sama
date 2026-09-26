@@ -21,6 +21,7 @@ export const en = {
   'tool.line': 'Line',
   'tool.polygon': 'Polygon',
   'tool.crop': 'Crop',
+  'tool.perspectiveCrop': 'Perspective Crop',
   'tool.image': 'Import image',
 
   // Tool hints (options bar)
@@ -37,6 +38,7 @@ export const en = {
   'hint.line': 'Drag to draw · Shift = 45° angles',
   'hint.polygon': 'Drag to draw · Shift = regular · Alt = from centre',
   'hint.crop': 'Drag to define crop area · Enter to confirm · Escape to cancel',
+  'hint.perspectiveCrop': 'Drag corners to define perspective · Enter to confirm · Escape to cancel',
 
   // Options bar
   'options.label': 'Tool options',
@@ -244,6 +246,7 @@ export const en = {
   'toast.openFailed': 'That file is not a valid Sama document.',
   'toast.groupNeedsTwo': 'Select at least two layers to group.',
   'toast.groupSameParent': 'Layers must be in the same group to be grouped together.',
+  'toast.perspectiveInvalid': 'The perspective shape must not cross over itself or bend inwards. Adjust the corners and try again.',
   'toast.convertToPathHint': 'Use Object ▸ Convert to path to edit this shape’s points.',
 
   // Shortcuts
@@ -310,6 +313,7 @@ export const en = {
   'history.Convert to path': 'Convert to path',
   'history.Canvas size': 'Canvas size',
   'history.Crop': 'Crop',
+  'history.Perspective crop': 'Perspective crop',
   'history.Document settings': 'Document settings',
   'history.Rename document': 'Rename document',
   'history.New paint layer': 'New paint layer',

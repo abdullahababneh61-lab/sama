@@ -57,6 +57,7 @@ existing Chromium: `CHROMIUM_PATH=/path/to/chrome npm run test:e2e`.)
 | Text | `T` | Click = single line, drag = paragraph box. Font, weight, size, colour, alignment, italic, line height, letter spacing, LTR/RTL. |
 | Rectangle / Ellipse / Line / Polygon | `M` / `L` / `\` / `U` cycles | Shift = square/circle/45°, Alt = from centre. Click without dragging = 100 × 100 px. Corner radius, polygon sides. |
 | Crop | `C` | Drag a crop area (Shift = square, Alt = from centre), adjust it with the handles or drag inside to move it; the part to be removed is shaded. Enter crops (layers outside are deleted, layers crossing the edge are trimmed, the artboard takes the new size); Esc cancels. |
+| Perspective Crop | `Shift+C` | Drag a starting rectangle, then drag each of the four corners on its own onto the edges of something seen at an angle (a photographed poster, a screen). Enter straightens that shape into a rectangle and crops to it; Esc cancels. Affected layers become image layers (see limitations). |
 | Hand | `H` or hold `Space` | Pan. Scroll also pans; `Ctrl`/`⌘`+scroll zooms. |
 | Zoom | `Z` | Click zooms in, Alt+click zooms out. |
 | Image import | toolbar button, `Ctrl+Shift+I`, drag-and-drop, paste | PNG/JPEG/WebP/GIF/SVG (SVG is imported as an image). |
@@ -94,6 +95,7 @@ with an Arabic keyboard layout.)
 | Area | Shortcut | Action |
 | ---- | -------- | ------ |
 | Tools | `V` `A` `B` `E` `P` `T` `M` `L` `\` `C` `H` `Z` | Select, Direct selection, Brush, Eraser, Pen, Text, Rectangle, Ellipse, Line, Crop, Hand, Zoom |
+| | `Shift+C` | Perspective Crop |
 | | `U` | Cycle shape tools (rectangle → ellipse → line → polygon) |
 | | hold `Space` | Temporary hand tool |
 | Edit | `Ctrl+Z` / `Ctrl+Shift+Z` or `Ctrl+Y` | Undo / Redo |
@@ -164,6 +166,13 @@ Flagged deliberately rather than left silent:
   area shift. Text layers can't be erased (same rule as Photoshop).
 - **Soft brushes** use the canvas blur filter. Browsers without it (older
   Safari) draw soft brushes with a hard edge. No pen-pressure support.
+- **Perspective crop turns layers into images.** A perspective correction
+  can't be applied to vector shapes or live text, so (as Photoshop does with
+  pixels) each layer inside the crop is rendered, straightened and replaced by
+  an image layer. Names, groups, visibility, lock, opacity and blend modes are
+  kept, and the JSON export records each image's original type and text
+  (`image.perspectiveCorrected`) — but those layers are no longer editable as
+  text or vectors. Undo restores the originals. Guides are cleared.
 - **Multi-selection** is limited to layers in the same group.
 - **SVG files** are imported as images, not as editable vectors. Very large
   photos are kept at full resolution (scaled to fit), which uses memory.

@@ -46,7 +46,7 @@ artboard, `x` grows to the right, `y` grows downwards.
 | `shape`           | rect, polygon    | `{ cornerRadius }` / `{ sides }`. |
 | `path`            | path, line, polygon | `{ d, closed, anchorCount }` — SVG path data **in artboard coordinates**. |
 | `text`            | text             | `{ content, fontFamily, fontSize, fontWeight, fontStyle, textAlign, direction, lineHeight, letterSpacing, color, wrapped }`. `direction` is `ltr` or `rtl`; `wrapped` is `true` for paragraph boxes. `letterSpacing` is in 1/1000 em. |
-| `image`           | image            | `{ assetId, fileName, naturalWidth, naturalHeight }`. |
+| `image`           | image            | `{ assetId, fileName, naturalWidth, naturalHeight, perspectiveCorrected? }`. `perspectiveCorrected` is present when the image was produced by a perspective crop: `{ originalType, text? }` — what the layer was before (and its text, for text layers). |
 | `paint`           | paint            | `{ strokeCount, colors, brushSizes, strokes[] }`; each stroke is `{ d, color, size, opacity, hardness, erased }` with `d` in artboard coordinates — the learner's actual gestures. |
 | `children`        | group            | Nested layers, top-most first. |
 

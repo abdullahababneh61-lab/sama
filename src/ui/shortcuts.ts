@@ -33,6 +33,7 @@ export const SHORTCUT_REFERENCE: ShortcutGroup[] = [
       { keys: '\\', label: 'tool.line' },
       { keys: 'U', label: 'shortcuts.cycleShapes' },
       { keys: 'C', label: 'tool.crop' },
+      { keys: 'Shift+C', label: 'tool.perspectiveCrop' },
       { keys: 'H', label: 'tool.hand' },
       { keys: 'Space', label: 'shortcuts.tempHand' },
       { keys: 'Z', label: 'tool.zoom' },

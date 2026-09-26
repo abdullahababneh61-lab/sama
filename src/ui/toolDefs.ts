@@ -3,6 +3,7 @@ import {
   Brush,
   Circle,
   Crop,
+  Proportions,
   Eraser,
   Hand,
   Hexagon,
@@ -41,7 +42,10 @@ export const TOOL_GROUPS: ToolDef[][] = [
     { id: 'line', icon: Slash, shortcut: '\\' },
     { id: 'polygon', icon: Hexagon, shortcut: 'U' },
   ],
-  [{ id: 'crop', icon: Crop, shortcut: 'C' }],
+  [
+    { id: 'crop', icon: Crop, shortcut: 'C' },
+    { id: 'perspectiveCrop', icon: Proportions, shortcut: 'Shift+C' },
+  ],
   [
     { id: 'hand', icon: Hand, shortcut: 'H' },
     { id: 'zoom', icon: ZoomIn, shortcut: 'Z' },

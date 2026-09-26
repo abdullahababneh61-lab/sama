@@ -381,3 +381,72 @@ test.describe('crop tool', () => {
     expectNoErrors(errors);
   });
 });
+
+test.describe('perspective crop tool', () => {
+  test('Shift+C; corners move independently; Enter straightens the quad; Escape cancels', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    // A red "poster seen at an angle" and a layer outside it.
+    const Q: [number, number][] = [
+      [300, 250],
+      [760, 300],
+      [820, 820],
+      [250, 760],
+    ];
+    await page.evaluate(() => (window as any).samaEditor.updateToolOptions('pen', { fill: '#e5484d', stroke: null }));
+    await page.keyboard.press('p');
+    for (const [x, y] of Q) await clickAt(page, x, y);
+    await clickAt(page, ...Q[0]);
+    await page.keyboard.press('m');
+    await drag(page, [900, 50], [1050, 150]);
+    await page.keyboard.press('Escape');
+
+    await page.keyboard.press('Shift+C');
+    expect((await workspaceState(page)).tool).toBe('perspectiveCrop');
+    const corners = () => page.evaluate(() => (window as any).samaEditor.getTool('perspectiveCrop').corners);
+    const start: [number, number][] = [
+      [300, 300],
+      [700, 300],
+      [700, 700],
+      [300, 700],
+    ];
+    await drag(page, start[0], start[2]);
+    for (let i = 0; i < 4; i++) await drag(page, start[i], Q[i]);
+    const c = await corners();
+    expect(Math.abs(c[1].y - 300)).toBeLessThan(3); // top-right moved on its own
+    expect(Math.abs(c[0].y - 250)).toBeLessThan(3);
+
+    await page.keyboard.press('Escape');
+    expect(await corners()).toBeNull();
+    expect(await page.evaluate(() => (window as any).samaEditor.doc.width)).toBe(1080);
+
+    await drag(page, start[0], start[2]);
+    for (let i = 0; i < 4; i++) await drag(page, start[i], Q[i]);
+    await page.keyboard.press('Enter');
+    await expect.poll(async () => (await workspaceState(page)).history.labels.at(-1)).toBe('Perspective crop');
+    const result = await page.evaluate(async () => {
+      const ed = (window as any).samaEditor;
+      const png: Blob = await ed.exportPng();
+      const bmp = await createImageBitmap(png);
+      const cv = document.createElement('canvas');
+      cv.width = bmp.width;
+      cv.height = bmp.height;
+      const x = cv.getContext('2d', { willReadFrequently: true })!;
+      x.drawImage(bmp, 0, 0);
+      const px = (u: number, v: number) => [...x.getImageData(Math.round(u * (bmp.width - 1)), Math.round(v * (bmp.height - 1)), 1, 1).data];
+      const doc = await ed.getDocument();
+      return { w: bmp.width, h: bmp.height, samples: [px(0.03, 0.03), px(0.97, 0.03), px(0.97, 0.97), px(0.03, 0.97), px(0.5, 0.5)], layers: doc.layers };
+    });
+    expect(Math.abs(result.w - 574)).toBeLessThanOrEqual(3);
+    expect(Math.abs(result.h - 525)).toBeLessThanOrEqual(3);
+    for (const p of result.samples) expect(p).toEqual([229, 72, 77, 255]); // straightened poster fills the artboard
+    expect(result.layers).toHaveLength(1); // the rectangle outside was removed
+    expect(result.layers[0].type).toBe('image');
+    expect(result.layers[0].image.perspectiveCorrected.originalType).toBe('path');
+
+    await page.keyboard.press('Control+z');
+    await settle(page);
+    expect(await page.evaluate(() => (window as any).samaEditor.doc.width)).toBe(1080);
+    expect((await workspaceState(page)).layers.map((l) => l.kind)).toEqual(['rect', 'path']);
+    expectNoErrors(errors);
+  });
+});

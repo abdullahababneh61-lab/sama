@@ -32,6 +32,8 @@ declare module 'fabric' {
     samaSides?: number;
     /** True while a text layer's name follows its content (until renamed). */
     samaAutoName?: boolean;
+    /** Set on image layers produced by a perspective crop: what the layer was before. */
+    samaPerspective?: { originalType: LayerKind; text?: string };
     /** Set by @erase2d/fabric: which objects the eraser affects. */
     erasable?: boolean | 'deep';
   }
@@ -47,6 +49,7 @@ export const SAMA_PROPERTIES = [
   'samaFileName',
   'samaSides',
   'samaAutoName',
+  'samaPerspective',
 ] as const;
 
 /** Accent colour used for selection handles, matches `--sw-accent`. */

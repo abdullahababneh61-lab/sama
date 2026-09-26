@@ -90,6 +90,9 @@ import { PenTool } from './tools/PenTool';
 import { TextTool } from './tools/TextTool';
 import { ShapeTool } from './tools/ShapeTool';
 import { CropTool } from './tools/CropTool';
+import { PerspectiveCropTool } from './tools/PerspectiveCropTool';
+import { correctedSize, isValidQuad, type XY } from './perspective';
+import { perspectiveWarpLayers } from './perspectiveCrop';
 import { ClippingGroup } from '@erase2d/fabric';
 
 export interface EditorOptions {
@@ -198,6 +201,7 @@ export class Editor {
       line: new ShapeTool(this, 'line'),
       polygon: new ShapeTool(this, 'polygon'),
       crop: new CropTool(this),
+      perspectiveCrop: new PerspectiveCropTool(this),
     };
 
     this.bindCanvasEvents();
@@ -1629,6 +1633,45 @@ export class Editor {
     obj.set('dirty', true);
   }
 
+  /**
+   * Perspective crop: straightens the quadrilateral `quad` (artboard
+   * coordinates; corners top-left, top-right, bottom-right, bottom-left) into
+   * a rectangle, crops the document to it and resizes the artboard. Every
+   * layer inside is warped and becomes an image layer (see perspectiveCrop.ts);
+   * layers outside are removed. One undoable step. Returns false if the shape
+   * can't be corrected.
+   */
+  async perspectiveCropArtboard(quad: XY[]): Promise<boolean> {
+    if (!isValidQuad(quad)) {
+      this.notify('toast.perspectiveInvalid', 'warning');
+      return false;
+    }
+    const size = correctedSize(quad);
+    const width = Math.min(8000, size.width);
+    const height = Math.min(8000, size.height);
+    this.exitTextEditing();
+    this.stopPathEditing();
+    this.canvas.discardActiveObject();
+    this.closeGroups();
+    const layers = await perspectiveWarpLayers({
+      canvas: this.canvas,
+      assets: this.assets,
+      objects: [...this.canvas.getObjects()],
+      quad,
+      width,
+      height,
+    });
+    this.canvas.remove(...this.canvas.getObjects());
+    layers.forEach((o) => applyLockState(o));
+    if (layers.length) this.canvas.add(...layers);
+    // Guides can't follow a perspective change, so they are cleared.
+    this.set({ doc: { ...this.doc, width, height }, guides: { vertical: [], horizontal: [] } });
+    this.handleSelectionChange();
+    this.fitToScreen();
+    this.commit('Perspective crop');
+    return true;
+  }
+
   // =========================================================================
   // Clipboard
   // =========================================================================
@@ -2132,6 +2175,11 @@ export class Editor {
       '\\': 'line',
       c: 'crop',
     };
+    // Shift+C: Perspective Crop (plain C is the regular Crop tool).
+    if (lower === 'c' && e.shiftKey && !e.altKey) {
+      this.setTool('perspectiveCrop');
+      return true;
+    }
     if (!e.altKey && toolKeys[lower]) {
       this.setTool(toolKeys[lower]);
       return true;

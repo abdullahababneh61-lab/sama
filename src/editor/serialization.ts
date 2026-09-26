@@ -80,7 +80,14 @@ export interface SemanticLayer {
     wrapped: boolean;
   };
   path?: { d: string; closed: boolean; anchorCount: number };
-  image?: { assetId?: string; fileName?: string; naturalWidth: number; naturalHeight: number };
+  image?: {
+    assetId?: string;
+    fileName?: string;
+    naturalWidth: number;
+    naturalHeight: number;
+    /** Present when the image was produced by a perspective crop: the layer's original type (and text). */
+    perspectiveCorrected?: { originalType: LayerKind; text?: string };
+  };
   paint?: {
     strokeCount: number;
     colors: string[];
@@ -258,6 +265,7 @@ export function describeLayer(obj: FabricObject, doc: DocumentSettings): Semanti
       fileName: obj.samaFileName,
       naturalWidth: el?.naturalWidth ?? obj.width,
       naturalHeight: el?.naturalHeight ?? obj.height,
+      ...(obj.samaPerspective ? { perspectiveCorrected: obj.samaPerspective } : {}),
     };
   }
 
