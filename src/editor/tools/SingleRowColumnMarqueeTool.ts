@@ -3,8 +3,10 @@
  * the artboard's width, or one pixel column spanning its height.
  *
  * - Row or Column is chosen in the options bar (the marquee shape switch).
- * - Hold the button and move to position the line; it's selected on release.
- * - Shift+click adds to the selection (several rows/columns); Esc clears.
+ * - Hold the button and move to position the line (its y or x shows next to
+ *   the pointer); it's selected on release.
+ * - Shift+click adds (several rows/columns), Alt+click subtracts, the
+ *   options-bar mode applies otherwise; Esc clears.
  * - Clicks outside the artboard's rows (or columns) do nothing.
  *
  * Like Photoshop, this tool has no keyboard shortcut of its own: pick it in
@@ -20,6 +22,7 @@ export class SingleRowColumnMarqueeTool extends RegionTool {
   /** Row (y) or column (x) index being placed, or null. */
   private index: number | null = null;
   private mode: CombineMode = 'replace';
+  private pointer: { x: number; y: number } | null = null;
 
   private get orientation() {
     return this.editor.toolOptions.singleRowColumnMarquee.orientation;
@@ -42,6 +45,7 @@ export class SingleRowColumnMarqueeTool extends RegionTool {
   }
 
   onPointerMove(ev: ToolPointerEvent) {
+    this.pointer = ev.viewportPoint;
     if (this.index === null) return;
     const index = this.indexAt(ev, true);
     if (index !== null && index !== this.index) {
@@ -55,18 +59,23 @@ export class SingleRowColumnMarqueeTool extends RegionTool {
     const i = this.index;
     this.index = null;
     const { width, height } = this.editor.doc;
-    this.editor.selectRegion(
+    this.commitShape(
       this.orientation === 'row' ? { type: 'rect', x: 0, y: i, w: width, h: 1 } : { type: 'rect', x: i, y: 0, w: 1, h: height },
       this.mode,
     );
     this.editor.canvas.requestRenderAll();
   }
 
+  protected get historyLabel() {
+    return this.orientation === 'row' ? 'Single Row Marquee' : 'Single Column Marquee';
+  }
+
   onOptionsChanged() {
+    super.onOptionsChanged();
     this.editor.canvas.requestRenderAll();
   }
 
-  renderOverlay(ctx: CanvasRenderingContext2D) {
+  protected renderPreview(ctx: CanvasRenderingContext2D) {
     if (this.index === null) return;
     const { width, height } = this.editor.doc;
     const i = this.index;
@@ -77,6 +86,7 @@ export class SingleRowColumnMarqueeTool extends RegionTool {
     this.strokePreview(ctx, (c) =>
       c.rect(Math.round(a.x) + 0.5, Math.round(a.y) + 0.5, Math.max(1, Math.round(b.x - a.x)), Math.max(1, Math.round(b.y - a.y))),
     );
+    if (this.pointer) this.drawLabel(ctx, this.orientation === 'row' ? `y ${i}` : `x ${i}`, this.pointer);
   }
 
   /** Pixel row/column under the pointer; null outside the artboard (unless clamping). */

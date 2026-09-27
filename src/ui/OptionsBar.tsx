@@ -14,6 +14,10 @@ import {
   FlipHorizontal2,
   Rows2,
   SquareDashed,
+  Square,
+  SquaresIntersect,
+  SquaresSubtract,
+  SquaresUnite,
   FlipVertical2,
   Group,
   Ungroup,
@@ -21,7 +25,8 @@ import {
 import { useEditor, useWorkspace } from '../workspace/context';
 import type { CountTool } from '../editor/tools/CountTool';
 import type { ArtboardTool } from '../editor/tools/ArtboardTool';
-import type { ToolId } from '../editor/types';
+import type { SelectionMode, ToolId } from '../editor/types';
+import { defaultSelectionMode } from '../editor/selectionModes';
 import { toolKey } from './toolDefs';
 import { useT } from '../i18n';
 import { NumberField } from './controls/NumberField';
@@ -37,12 +42,21 @@ export function OptionsBar() {
     switch (tool) {
       case 'select':
       case 'direct':
-      case 'objectSelection':
       case 'groupSelection':
         return <SelectOptions />;
+      case 'objectSelection':
+        return (
+          <>
+            <SelectionModeButtons />
+            <span className="sw-options__sep" />
+            <SelectOptions />
+          </>
+        );
       case 'magicWand':
         return (
           <>
+            <SelectionModeButtons />
+            <span className="sw-options__sep" />
             <MagicWandOptions />
             <span className="sw-options__sep" />
             <SelectOptions />
@@ -283,7 +297,7 @@ function SpotHealOptions() {
 /**
  * Options of the region-selection tools: the marquee shape switch (the
  * three marquee tools and the Row/Column choice), the Quick Selection brush
- * size, and the current selection with Invert / Crop / Deselect.
+ * size, and the refine / Invert / Deselect / layer-via-selection actions.
  */
 function RegionOptions({ marquee = false, quickSelection = false }: { marquee?: boolean; quickSelection?: boolean }) {
   const editor = useEditor();
@@ -303,9 +317,12 @@ function RegionOptions({ marquee = false, quickSelection = false }: { marquee?: 
   };
   return (
     <div className="sw-options__group">
+      <span className="sw-options__cluster">
+        <SelectionModeButtons />
+        <span className="sw-options__sep" />
+      </span>
       {marquee && (
         <span className="sw-options__cluster">
-          <span className="sw-options__caption">{t('options.marqueeShape')}</span>
           {shape('rectMarquee', t('tool.rectMarquee'), <SquareDashed size={16} />, tool === 'rectMarquee', () => editor?.setTool('rectMarquee'))}
           {shape('ellipseMarquee', t('tool.ellipseMarquee'), <CircleDashed size={16} />, tool === 'ellipseMarquee', () => editor?.setTool('ellipseMarquee'))}
           {shape('singleRowColumnMarquee', t('options.singleRow'), <Rows2 size={16} />, tool === 'singleRowColumnMarquee' && orientation === 'row', rowCol('row'))}
@@ -320,18 +337,25 @@ function RegionOptions({ marquee = false, quickSelection = false }: { marquee?: 
         </span>
       )}
       <span className="sw-options__cluster">
-        <span className="sw-options__caption" data-testid="region-size">
+        <span className="sw-options__caption sw-options__readout" data-testid="region-size" title={t('options.selectionSizeTitle')}>
           {sel ? t('options.selectionSize', { w: Math.round(sel.width), h: Math.round(sel.height) }) : t('options.noSelection')}
         </span>
+        <span className="sw-options__sep" />
+      </span>
+      <span className="sw-options__cluster">
+        <SelectionRefine disabled={!sel} />
+        <span className="sw-options__sep" />
+      </span>
+      <span className="sw-options__cluster">
         <button type="button" className="sw-btn sw-btn--ghost" onClick={() => editor?.invertPixelSelection()}>
           {t('options.invertSelection')}
         </button>
-        <button type="button" className="sw-btn sw-btn--ghost" disabled={!sel} onClick={() => editor?.clearPixelSelection()}>
+        <button type="button" className="sw-btn sw-btn--ghost" disabled={!sel} title="Ctrl+Shift+A" onClick={() => editor?.clearPixelSelection()}>
           {t('menu.deselect')}
         </button>
+        <span className="sw-options__sep" />
       </span>
       <span className="sw-options__cluster">
-        <span className="sw-options__sep" />
         <button type="button" className="sw-btn sw-btn--ghost" disabled={!sel} title="Ctrl+Shift+J" onClick={() => void editor?.layerViaSelection('cut')}>
           {t('options.cutToNewLayer')}
         </button>
@@ -339,11 +363,44 @@ function RegionOptions({ marquee = false, quickSelection = false }: { marquee?: 
           {t('options.copyToNewLayer')}
         </button>
       </span>
-      <span className="sw-options__cluster">
-        <span className="sw-options__sep" />
-        <SelectionRefine disabled={!sel} />
-      </span>
     </div>
+  );
+}
+
+/**
+ * New / Add / Subtract / Intersect for the active selecting tool, always
+ * first in its options bar. Shift, Alt and Shift+Alt pick the last three
+ * for a single click or drag.
+ */
+function SelectionModeButtons() {
+  const editor = useEditor();
+  const t = useT();
+  const tool = useWorkspace((s) => s.activeTool);
+  const mode = useWorkspace((s) => s.toolOptions.selectionModes[tool]) ?? defaultSelectionMode(tool);
+  const modes: [SelectionMode, React.ReactNode][] = [
+    ['new', <Square key="n" size={16} />],
+    ['add', <SquaresUnite key="a" size={16} />],
+    ['subtract', <SquaresSubtract key="s" size={16} />],
+    ['intersect', <SquaresIntersect key="i" size={16} />],
+  ];
+  // Quick Selection paints: it can add or take away, not intersect.
+  const shown = tool === 'quickSelection' ? modes.slice(0, 3) : modes;
+  return (
+    <span className="sw-options__cluster" role="group" aria-label={t('options.selectionMode')} data-testid="selection-modes">
+      {shown.map(([m, icon]) => (
+        <IconButton
+          key={m}
+          label={t(`options.mode.${m}`)}
+          shortcut={m === 'add' ? 'Shift' : m === 'subtract' ? 'Alt' : m === 'intersect' ? 'Shift+Alt' : undefined}
+          size="sm"
+          active={mode === m}
+          onClick={() => editor?.setSelectionMode(tool, m)}
+          data-mode={m}
+        >
+          {icon}
+        </IconButton>
+      ))}
+    </span>
   );
 }
 
@@ -359,7 +416,7 @@ function SelectionRefine({ disabled }: { disabled: boolean }) {
       <button type="button" className="sw-btn sw-btn--ghost" disabled={disabled} onClick={() => refine('feather', o.feather)}>
         {t('options.feather')}
       </button>
-      <NumberField label="" title={t('options.featherRadius')} value={o.feather} min={0.5} max={250} step={0.5} suffix="px" width={70} onChange={(v) => set({ feather: v })} />
+      <NumberField label="" title={t('options.featherRadius')} value={o.feather} min={0.5} max={250} step={0.5} suffix="px" width={62} onChange={(v) => set({ feather: v })} />
       <button type="button" className="sw-btn sw-btn--ghost" disabled={disabled} onClick={() => refine('smooth', SMOOTH_RADIUS)}>
         {t('options.smooth')}
       </button>
@@ -369,7 +426,7 @@ function SelectionRefine({ disabled }: { disabled: boolean }) {
       <button type="button" className="sw-btn sw-btn--ghost" disabled={disabled} onClick={() => refine('contract', o.amount)}>
         {t('options.contract')}
       </button>
-      <NumberField label="" title={t('options.modifyAmount')} value={o.amount} min={1} max={500} step={1} suffix="px" width={70} onChange={(v) => set({ amount: Math.round(v) })} />
+      <NumberField label="" title={t('options.modifyAmount')} value={o.amount} min={1} max={500} step={1} suffix="px" width={62} onChange={(v) => set({ amount: Math.round(v) })} />
     </>
   );
 }

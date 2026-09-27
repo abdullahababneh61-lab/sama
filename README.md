@@ -55,22 +55,35 @@ another variant, which then becomes the button's face. The groups are the
 Marquees (Rectangular, Elliptical, Single Row/Column) and the Lassos (Lasso,
 Polygonal, Magnetic). Keyboard shortcuts select variants directly.
 
+**Selection modes (every selecting tool).** The options bar starts with four
+buttons — New, Add, Subtract, Intersect — and keys held when a selection
+starts override them for that one selection: **Shift = add, Alt/Option =
+subtract, Shift+Alt = intersect** (Quick Selection: New/Add/Subtract only,
+Add by default). The cursor shows the mode that the next click will use (a +, −
+or × badge) and follows the keys as you press them. Every area selection
+change — a new selection, add/subtract, Invert, Feather/Smooth/Expand/
+Contract, Deselect, Select All — is **one undo step** named after it; the
+selection's size shows next to the pointer while you draw and flashes by the
+selection for a moment afterwards. The options bar order is the same for
+all of them: modes → tool settings → size → Feather/Smooth/Expand/Contract →
+Invert/Deselect → Cut/Copy to New Layer.
+
 | Tool | Key | Notes |
 | ---- | --- | ----- |
 | Selection (Move / Select) | `V` | Click to select (8 resize handles + rotation), drag to move. Corner handles resize proportionally (hold Shift for free resizing); edge handles resize one dimension. Drag on empty space to marquee-select every object it touches; Shift+click adds/removes. Rotation snaps to 15° with Shift. `Ctrl`/`⌘`+click selects inside groups; double-click a group to go inside it. Alt+drag duplicates. Esc deselects, Delete removes. |
 | Direct Selection | `A` | Edit anchor points and Bézier handles of paths, lines and polygons. Handles move with their anchor; smooth points keep handles aligned (Alt breaks them). Double-click an anchor to switch corner ↔ smooth. |
 | Group Selection | `Shift+V` | First click selects the innermost layer inside a group; each further click on it selects the group one level up. Drag moves the selected item without ungrouping. Esc deselects. |
 | Artboard | `Shift+O` | Artboards show with a border and their name. Drag on the empty pasteboard to add "Artboard N"; drag a border or handle to resize; drag inside to move an artboard together with its artwork; double-click the name to rename; Delete removes the artboard and its artwork (asks first). The first artboard is the main one — its name is the document name and it's what PNG export renders. |
-| Rectangular Marquee | `Shift+M` | Drag to select an area (animated "marching ants"). Shift = square, Alt = from centre. A new drag replaces the selection; Shift held when starting adds to it. Click or Esc deselects. |
+| Rectangular Marquee | `Shift+M` | Drag to select an area (animated "marching ants"); the edges snap to whole pixels at any zoom. Shift = square, Alt = from centre (pressed after the drag starts). Click or Esc deselects. |
 | *Selection actions* (options bar of every marquee/lasso/Quick Selection tool) | `Ctrl+J` / `Ctrl+Shift+J` | **Copy to New Layer** / **Cut to New Layer**: the pixels inside the selection's exact shape go to a new image layer right above the original (transparent elsewhere); Cut also leaves the matching hole in the original. The new layer is selected, the selection cleared, one undo step. Without a selection, `Ctrl+J` still duplicates. **Feather** (radius, default 2 px) softens the selection's edge, **Smooth** rounds off jaggies and specks, **Expand / Contract** (amount) grow or shrink it. Plus Invert and Deselect. (Selection tools never resize the canvas — use the Crop tool for that.) |
 | Elliptical Marquee | `Shift+M` again | Same, for an elliptical area (Shift = circle). |
-| Single Row/Column Marquee | marquee pop-out or options bar | Click to select one 1-px row across the artboard (or one column down it); pick Row/Column in the marquee options. Shift+click adds. |
-| Lasso | `Q` | Drag to draw a freehand selection; it closes when you release. Shift when starting adds. Esc cancels. |
+| Single Row/Column Marquee | marquee pop-out or options bar | Click to select one 1-px row across the artboard (or one column down it); pick Row/Column in the marquee options. |
+| Lasso | `Q` | Drag to draw a freehand selection; it closes when you release. Esc cancels. |
 | Polygonal Lasso | `Shift+L` | Click to place points (a live segment follows the pointer; Shift = 45°). Click the first point, double-click or press Enter to close; Backspace removes the last point; Esc cancels. |
-| Magnetic Lasso | `Alt+Shift+L` | Click once, then move along an edge: the outline clings to the strongest contrast edge nearby and places anchors automatically (click to add one). Close on the first point, double-click or Enter; Backspace removes an anchor; Esc cancels. |
-| Object Selection | `W` | Click a layer to select it; drag a box to select the layers mostly inside it (≥ 50 % of their bounds). Shift adds. Esc deselects. |
-| Quick Selection | `Shift+W` | Paint to select: the area under the round brush plus similar colours around it. Alt+paint removes. `[` / `]` resize. Esc deselects. |
-| Magic Wand | `Y` | Click a layer to select every layer of a similar colour. Tolerance (0–255, default 32) and Contiguous (only layers touching it, on by default) in the options bar. Shift+click adds. Esc deselects. |
+| Magnetic Lasso | `Alt+Shift+L` | Click once, then move along an edge: the outline clings to the strongest contrast edge within the dashed circle (10 px) and places anchors automatically (click to add one). Close on the first point, double-click or Enter; Backspace removes an anchor; Esc cancels. |
+| Object Selection | `W` | Click a layer to select it; drag a box to select the layers mostly inside it (≥ 50 % of their bounds). Shift+click on a selected layer removes it. Esc deselects. |
+| Quick Selection | `Shift+W` | Paint to select similar colours: it grows from the colour under the brush's centre and stops at colour edges, even where the brush overlaps them. The brush starts at a size that suits the artboard (≈ 1/35 of its shorter side); `[` / `]` resize. Alt+paint removes. Each stroke is one undo step. Esc deselects. |
+| Magic Wand | `Y` | Click a layer to select every layer of a similar colour. Tolerance (0–255, default 32) and Contiguous (only layers touching it, on by default) in the options bar. Esc deselects. |
 | Brush | `B` | Size, colour, opacity, **hardness** (soft edges), smoothing. Shift = straight line. `[` / `]` resize. Strokes go into the selected paint layer (or a new one). |
 | Eraser | `E` | Erases the selected layers, or everything unlocked under the cursor when nothing is selected. Non-destructive and undoable. |
 | Pen | `P` | Click = corner, drag = curve, click first point = close, Enter/Esc = finish, Backspace = remove last point. |
@@ -226,8 +239,9 @@ Flagged deliberately rather than left silent:
   Layer works on **image layers** only — shapes, text and brush strokes are
   vectors and would need rasterizing first (not built yet). Painting,
   erasing and Delete don't yet act inside a selection (Delete shows a
-  notice). Region selections cover the main artboard only, aren't part of
-  undo/redo, and aren't saved in the document.
+  notice). Region selections cover the main artboard only and aren't saved
+  in the document. They are part of undo/redo; *layer* selections (V, Object
+  Selection, Magic Wand, Group Selection) are not — as in Photoshop and Figma.
 - **Ctrl+Shift+J in Chrome, Edge and Brave (Windows/Linux)** opens the
   browser's developer console, which a web page can't prevent — use the
   "Cut to New Layer" button there. (On macOS the shortcut is ⌘⇧J and works.)

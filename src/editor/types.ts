@@ -174,6 +174,9 @@ export interface MagicWandOptions {
   contiguous: boolean;
 }
 
+/** How a new selection combines with the current one (see selectionModes.ts). */
+export type SelectionMode = 'new' | 'add' | 'subtract' | 'intersect';
+
 /** Amounts for the selection refinements (artboard pixels). */
 export interface SelectionRefineOptions {
   feather: number;
@@ -193,6 +196,8 @@ export interface ToolOptions {
   quickSelection: QuickSelectionOptions;
   magicWand: MagicWandOptions;
   selectionRefine: SelectionRefineOptions;
+  /** Selection mode per selecting tool (a tool without an entry uses its default). */
+  selectionModes: Partial<Record<ToolId, SelectionMode>>;
 }
 
 /**

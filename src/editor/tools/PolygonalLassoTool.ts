@@ -7,8 +7,11 @@
  * - Close: click the first point (it highlights when the pointer is over
  *   it, like the Pen tool), double-click, or press Enter (at least 3 points).
  * - Backspace/Delete: remove the last point. Esc: cancel the whole shape.
- * - Shift while placing points constrains the edge to 45° steps; Shift on
- *   the *first* click adds the shape to the existing selection.
+ * - Keys held on the *first* click pick the mode (Shift = add, Alt =
+ *   subtract, both = intersect; otherwise the options-bar mode). After that,
+ *   Shift constrains each edge to 45° steps.
+ * - The shape's live size shows next to the pointer, and a faint line
+ *   previews how it will close.
  */
 import { Point } from 'fabric';
 import { RegionTool } from './RegionTool';
@@ -25,6 +28,10 @@ export class PolygonalLassoTool extends RegionTool {
   private points: Point[] = [];
   private hover: Point | null = null;
   private mode: CombineMode = 'replace';
+
+  protected get historyLabel() {
+    return 'Polygonal Lasso';
+  }
 
   protected get busy() {
     return this.points.length > 0;
@@ -81,7 +88,7 @@ export class PolygonalLassoTool extends RegionTool {
     return super.onKeyDown(e);
   }
 
-  renderOverlay(ctx: CanvasRenderingContext2D) {
+  protected renderPreview(ctx: CanvasRenderingContext2D) {
     if (!this.points.length) return;
     const pts = this.toViewport(this.points);
     const hover = this.hover ? this.editor.sceneToViewport(this.hover) : null;
@@ -89,6 +96,18 @@ export class PolygonalLassoTool extends RegionTool {
       pts.forEach((p, i) => (i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)));
       if (hover) c.lineTo(hover.x, hover.y);
     });
+    // How the shape will close, faintly.
+    if (hover && this.points.length >= 2) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(hover.x, hover.y);
+      ctx.lineTo(pts[0].x, pts[0].y);
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (hover) this.drawLabel(ctx, this.sizeOf(this.hover ? [...this.points, this.hover] : this.points), hover);
     // First point: a handle that highlights when a click would close the shape.
     const first = pts[0];
     const closing = this.points.length >= 3 && hover !== null && this.nearFirst(hover);
@@ -106,7 +125,7 @@ export class PolygonalLassoTool extends RegionTool {
     const points = this.points.map((p) => ({ x: p.x, y: p.y }));
     const mode = this.mode;
     this.cancel();
-    this.editor.selectRegion({ type: 'polygon', points: points as XY[] }, mode);
+    this.commitShape({ type: 'polygon', points: points as XY[] }, mode);
     this.editor.canvas.requestRenderAll();
   }
 

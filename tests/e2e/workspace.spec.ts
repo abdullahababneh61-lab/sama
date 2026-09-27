@@ -1157,8 +1157,11 @@ test.describe('object-based selection tools', () => {
     await page.keyboard.up('Alt');
     expect(await regionHas(page, 350, 350)).toBe(false);
     expect(await regionHas(page, 50, 50)).toBe(true);
+    // The brush was sized for the 1080 px artboard (1/35 of it); ] enlarges it.
+    const qsSize = () => page.evaluate(() => (window as any).samaEditor.store.getState().toolOptions.quickSelection.size as number);
+    expect(await qsSize()).toBe(31);
     await page.keyboard.press(']');
-    expect(await page.evaluate(() => (window as any).samaEditor.store.getState().toolOptions.quickSelection.size)).toBe(29);
+    expect(await qsSize()).toBe(36);
     await page.keyboard.press('Escape');
     expect(await region(page)).toBeNull();
     expectNoErrors(errors);
@@ -1425,7 +1428,7 @@ test.describe('selection refinement', () => {
     const bounds = () => page.evaluate(() => (window as any).samaEditor.pixelSelection.bounds());
     await page.getByRole('button', { name: 'Expand' }).click();
     expect(await bounds()).toEqual({ x: 90, y: 90, width: 320, height: 220 });
-    await expect(page.getByTestId('region-size')).toHaveText('Selection: 320 × 220 px');
+    await expect(page.getByTestId('region-size')).toHaveText('320 × 220 px');
     await page.getByRole('button', { name: 'Contract' }).click();
     await page.getByRole('button', { name: 'Contract' }).click();
     expect(await bounds()).toEqual({ x: 110, y: 110, width: 280, height: 180 });
@@ -1441,6 +1444,211 @@ test.describe('selection refinement', () => {
     const feathered = (await bounds())!;
     expect(feathered.width).toBeGreaterThan(280);
     expect(feathered.width).toBeLessThan(295);
+    expectNoErrors(errors);
+  });
+});
+
+/** Drags the pointer through artboard points (a freehand lasso). */
+async function lassoPath(page: import('@playwright/test').Page, pts: [number, number][]) {
+  const first = await toPage(page, ...pts[0]);
+  await page.mouse.move(first.x, first.y);
+  await page.mouse.down();
+  for (const pt of [...pts.slice(1), pts[0]]) {
+    const q = await toPage(page, ...pt);
+    await page.mouse.move(q.x, q.y, { steps: 6 });
+  }
+  await page.mouse.up();
+  await page.waitForTimeout(100);
+}
+
+test.describe('selection polish', () => {
+  test('every selection change is one undo step with a clear name', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    const labels = async () => (await workspaceState(page)).history.labels;
+    await page.keyboard.press('Shift+M');
+    await drag(page, [100, 100], [300, 250]);
+    expect((await labels()).at(-1)).toBe('Rectangular Marquee');
+    await page.keyboard.press('q');
+    await lassoPath(page, [[500, 500], [600, 500], [600, 560], [500, 560]]);
+    expect(await regionHas(page, 150, 150)).toBe(false); // a new lasso replaced it
+    expect((await labels()).at(-1)).toBe('Lasso');
+    await page.getByRole('button', { name: 'Invert', exact: true }).click();
+    expect((await labels()).at(-1)).toBe('Invert selection');
+    await page.getByRole('button', { name: 'Expand', exact: true }).click();
+    expect((await labels()).at(-1)).toBe('Expand selection');
+    await page.keyboard.press('Escape');
+    expect((await labels()).at(-1)).toBe('Deselect');
+    expect(await region(page)).toBeNull();
+    // Undo walks back through them one at a time.
+    await page.keyboard.press('Control+z');
+    await settle(page);
+    expect(await region(page)).not.toBeNull();
+    await page.keyboard.press('Control+z'); // expand
+    await page.keyboard.press('Control+z'); // invert
+    await settle(page);
+    expect(await regionHas(page, 550, 530)).toBe(true);
+    expect(await regionHas(page, 50, 50)).toBe(false);
+    await page.keyboard.press('Control+z'); // lasso
+    await settle(page);
+    expect(await regionHas(page, 150, 150)).toBe(true);
+    await page.keyboard.press('Control+z'); // marquee
+    await settle(page);
+    expect(await region(page)).toBeNull();
+    await page.keyboard.press('Control+Shift+z');
+    await settle(page);
+    expect(await regionHas(page, 150, 150)).toBe(true);
+    // A stroke of Quick Selection is one step too.
+    await page.keyboard.press('Shift+W');
+    const before = (await workspaceState(page)).history.position;
+    await drag(page, [700, 700], [760, 760]);
+    const after = (await workspaceState(page)).history;
+    expect(after.position).toBe(before + 1);
+    expect(after.labels[after.position]).toBe('Quick Selection');
+    expectNoErrors(errors);
+  });
+
+  test('Alt subtracts and Shift+Alt intersects, with every region tool', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.keyboard.press('Shift+M');
+    await drag(page, [100, 100], [300, 300]);
+    await page.keyboard.down('Alt');
+    await drag(page, [200, 200], [400, 400]);
+    await page.keyboard.up('Alt');
+    expect(await regionHas(page, 150, 150)).toBe(true);
+    expect(await regionHas(page, 250, 250)).toBe(false);
+    expect(await regionHas(page, 350, 350)).toBe(false);
+    // Shift+Alt: intersect.
+    await drag(page, [100, 100], [300, 300]);
+    await page.keyboard.down('Shift');
+    await page.keyboard.down('Alt');
+    await drag(page, [200, 150], [400, 400]);
+    await page.keyboard.up('Alt');
+    await page.keyboard.up('Shift');
+    const r = (await region(page))!;
+    expect(Math.abs(r.x - 200)).toBeLessThanOrEqual(1);
+    expect(Math.abs(r.y - 150)).toBeLessThanOrEqual(1);
+    expect(Math.abs(r.width - 100)).toBeLessThanOrEqual(1);
+    expect(Math.abs(r.height - 150)).toBeLessThanOrEqual(1);
+    // Lasso: Alt at the start subtracts.
+    await page.keyboard.press('q');
+    await page.keyboard.down('Alt');
+    await lassoPath(page, [[180, 140], [320, 140], [320, 220], [180, 220]]);
+    await page.keyboard.up('Alt');
+    expect(await regionHas(page, 250, 180)).toBe(false);
+    expect(await regionHas(page, 250, 280)).toBe(true);
+    // Polygonal lasso: Alt on the first click.
+    await page.keyboard.press('Shift+L');
+    await clickAt(page, 190, 240, ['Alt']);
+    await clickAt(page, 320, 240);
+    await clickAt(page, 320, 320);
+    await clickAt(page, 190, 320);
+    await page.keyboard.press('Enter');
+    expect(await regionHas(page, 250, 280)).toBe(false);
+    expectNoErrors(errors);
+  });
+
+  test('options-bar mode buttons and a cursor that follows Shift/Alt', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.keyboard.press('Shift+M');
+    const modes = page.getByTestId('selection-modes');
+    await expect(modes.locator('button')).toHaveCount(4);
+    await expect(modes.locator('[data-mode=new]')).toHaveAttribute('aria-pressed', 'true');
+    await drag(page, [100, 100], [300, 300]);
+    await modes.locator('[data-mode=subtract]').click();
+    expect(await page.evaluate(() => (window as any).samaEditor.store.getState().toolOptions.selectionModes.rectMarquee)).toBe('subtract');
+    await drag(page, [200, 200], [400, 400]); // no keys: the tool's mode subtracts
+    expect(await regionHas(page, 150, 150)).toBe(true);
+    expect(await regionHas(page, 250, 250)).toBe(false);
+    // The cursor shows the mode, and follows the keys before anything is clicked.
+    const cursor = () => page.evaluate(() => (window as any).samaEditor.canvas.defaultCursor as string);
+    const p = await toPage(page, 600, 600);
+    await page.mouse.move(p.x, p.y);
+    const subtractCursor = await cursor();
+    expect(subtractCursor).toContain('data:image/svg+xml');
+    await page.keyboard.down('Shift');
+    const addCursor = await cursor();
+    await page.keyboard.up('Shift');
+    expect(addCursor).not.toBe(subtractCursor);
+    expect(await cursor()).toBe(subtractCursor);
+    // Quick Selection: New / Add / Subtract only, Add by default.
+    await page.keyboard.press('Shift+W');
+    await expect(modes.locator('button')).toHaveCount(3);
+    await expect(modes.locator('[data-mode=add]')).toHaveAttribute('aria-pressed', 'true');
+    // Magic Wand and Object Selection have them too; Selection does not.
+    await page.keyboard.press('y');
+    await expect(modes.locator('button')).toHaveCount(4);
+    await page.keyboard.press('w');
+    await expect(modes.locator('button')).toHaveCount(4);
+    await page.keyboard.press('v');
+    await expect(modes).toHaveCount(0);
+    expectNoErrors(errors);
+  });
+
+  test('magic wand and object selection: Alt subtracts, Shift+Alt intersects', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await addRect(page, '#e5484d', [100, 100], [200, 200]);
+    await addRect(page, '#3e63dd', [400, 100], [500, 200]);
+    await page.keyboard.press('y');
+    await clickAt(page, 150, 150);
+    await clickAt(page, 450, 150, ['Shift']);
+    expect((await selectedNames(page)).length).toBe(2);
+    await clickAt(page, 150, 150, ['Alt']);
+    expect(await selectedNames(page)).toHaveLength(1);
+    await page.keyboard.press('w');
+    await clickAt(page, 150, 150, ['Shift']);
+    expect(await selectedNames(page)).toHaveLength(2);
+    await clickAt(page, 450, 150, ['Alt']);
+    expect(await selectedNames(page)).toHaveLength(1);
+    const red = (await selectedNames(page))[0];
+    // Shift+Alt box around both: keeps only what was already selected.
+    await page.keyboard.down('Shift');
+    await page.keyboard.down('Alt');
+    await drag(page, [50, 50], [550, 250]);
+    await page.keyboard.up('Alt');
+    await page.keyboard.up('Shift');
+    expect(await selectedNames(page)).toEqual([red]);
+    expectNoErrors(errors);
+  });
+
+  test('quick selection stops at colour edges even when the brush overlaps them', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await addRect(page, '#e5484d', [200, 200], [500, 500]);
+    await page.keyboard.press('Shift+W');
+    await page.evaluate(() => (window as any).samaEditor.updateToolOptions('quickSelection', { size: 120 }));
+    // The brush reaches ~60 px past the right edge of the square.
+    await drag(page, [480, 300], [485, 400]);
+    const r = (await region(page))!;
+    expect(r.x + r.width).toBeLessThanOrEqual(501);
+    expect(await regionHas(page, 520, 350)).toBe(false);
+    expect(await regionHas(page, 250, 250)).toBe(true);
+    expectNoErrors(errors);
+  });
+
+  test('marquee bounds are pixel-exact at any zoom', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.keyboard.press('Shift+M');
+    for (const zoom of [0.37, 1, 2.5, 7]) {
+      await page.evaluate((z) => (window as any).samaEditor.zoomTo(z), zoom);
+      // Integer page positions near the view's centre, and the scene points they map to.
+      const pts = await page.evaluate(() => {
+        const ed = (window as any).samaEditor;
+        const r = ed.canvas.upperCanvasEl.getBoundingClientRect();
+        const v = ed.canvas.viewportTransform;
+        const a = { x: Math.round(r.left + r.width / 2 - 83), y: Math.round(r.top + r.height / 2 - 61) };
+        const b = { x: a.x + 157, y: a.y + 113 };
+        const scene = (p: { x: number; y: number }) => ({ x: (p.x - r.left - v[4]) / v[0], y: (p.y - r.top - v[5]) / v[3] });
+        return { a, b, sa: scene(a), sb: scene(b) };
+      });
+      await page.mouse.move(pts.a.x, pts.a.y);
+      await page.mouse.down();
+      await page.mouse.move(pts.b.x, pts.b.y, { steps: 5 });
+      await page.mouse.up();
+      const r = (await region(page))!;
+      const x0 = Math.round(pts.sa.x);
+      const y0 = Math.round(pts.sa.y);
+      expect(r, `zoom ${zoom}`).toEqual({ x: x0, y: y0, width: Math.round(pts.sb.x) - x0, height: Math.round(pts.sb.y) - y0 });
+      await page.keyboard.press('Escape');
+    }
     expectNoErrors(errors);
   });
 });

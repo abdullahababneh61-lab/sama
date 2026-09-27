@@ -75,6 +75,7 @@ import type {
   DocumentSettings,
   LayerKind,
   SelectionInfo,
+  SelectionMode,
   SelectionPatch,
   TextAlign,
   ToolId,
@@ -111,6 +112,7 @@ import { MagicWandTool } from './tools/MagicWandTool';
 import { GroupSelectionTool } from './tools/GroupSelectionTool';
 import { PixelSelection, type CombineMode, type SelectionShape } from './pixelSelection';
 import { SelectionAnts } from './SelectionAnts';
+import { defaultSelectionMode } from './selectionModes';
 import { renderArtboardPixels, type ScenePixels } from './scenePixels';
 import { applySelectionToImage, selectionAlphaCanvas, withOffscreenRendering } from './selectionLayers';
 import {
@@ -799,6 +801,11 @@ export class Editor {
     this.brushCursor.style.display = 'none';
   }
 
+  /** Shows a selection-mode sign (+ / −) inside the brush circle, or none. */
+  setBrushCursorMode(mode: 'add' | 'subtract' | null) {
+    this.brushCursor.dataset.mode = mode ?? '';
+  }
+
   // =========================================================================
   // Snapping
   // =========================================================================
@@ -921,29 +928,50 @@ export class Editor {
   // Region (pixel) selection — marquee, lasso and quick-selection tools
   // =========================================================================
 
-  /** Adds, subtracts or replaces the region selection with a shape (artboard coordinates). */
-  selectRegion(shape: SelectionShape, mode: CombineMode) {
+  // Every finished selection change is one undo step, labelled after the
+  // action ("Rectangular Marquee", "Deselect", "Feather"…). Live previews
+  // (a Quick Selection stroke in progress) use setRegionMask and commit once
+  // at the end.
+
+  /**
+   * Adds, subtracts, intersects or replaces the region selection with a
+   * shape (artboard coordinates), as one undo step named `label`.
+   */
+  selectRegion(shape: SelectionShape, mode: CombineMode, label = 'Selection') {
     this.pixelSelection.fit(this.doc.width, this.doc.height);
     this.pixelSelection.combine(shape, mode);
     this.publishPixelSelection();
+    this.commit(label);
   }
 
-  /** Replaces the region selection with a mask (see `PixelSelection`). */
+  /** A selecting tool's mode from the options bar (New / Add / Subtract / Intersect). */
+  selectionModeOf(tool: ToolId): SelectionMode {
+    return this.toolOptions.selectionModes[tool] ?? defaultSelectionMode(tool);
+  }
+
+  setSelectionMode(tool: ToolId, mode: SelectionMode) {
+    this.updateToolOptions('selectionModes', { [tool]: mode });
+  }
+
+  /** Replaces the region selection with a mask (no undo step: call `commit` when the gesture ends). */
   setRegionMask(mask: Uint8Array) {
     this.pixelSelection.setMask(mask);
     this.publishPixelSelection();
   }
 
-  clearPixelSelection() {
+  /** Removes the region selection (an undo step "Deselect", unless `commit` is false). */
+  clearPixelSelection({ commit = true }: { commit?: boolean } = {}) {
     if (this.pixelSelection.isEmpty) return;
     this.pixelSelection.clear();
     this.publishPixelSelection();
+    if (commit) this.commit('Deselect');
   }
 
   invertPixelSelection() {
     this.pixelSelection.fit(this.doc.width, this.doc.height);
     this.pixelSelection.invert();
     this.publishPixelSelection();
+    this.commit('Invert selection');
   }
 
   /** Pushes the region selection's bounds to the UI and redraws the marching ants. */
@@ -971,6 +999,7 @@ export class Editor {
     if (this.pixelSelection.isEmpty) return;
     this.pixelSelection[op](amount);
     this.publishPixelSelection();
+    this.commit({ feather: 'Feather', smooth: 'Smooth', expand: 'Expand selection', contract: 'Contract selection' }[op]);
   }
 
   private layerViaBusy = false;
@@ -2231,6 +2260,7 @@ export class Editor {
         json: JSON.stringify(serializeObject(this.canvas, o)),
       })),
       selection: [...this.state.selectedIds],
+      pixelSelection: this.pixelSelection.encode(),
     };
   }
 
@@ -2302,6 +2332,9 @@ export class Editor {
       this.canvas.remove(...this.canvas.getObjects());
       this.canvas.add(...result);
       this.set({ doc: { ...snap.doc } });
+      this.pixelSelection.fit(snap.doc.width, snap.doc.height);
+      this.pixelSelection.restore(snap.pixelSelection ?? null);
+      this.publishPixelSelection();
       const selectable = snap.selection
         .map((id) => findById(this.canvas, id))
         .filter((o): o is FabricObject => !!o && o.visible);
@@ -2390,7 +2423,7 @@ export class Editor {
       const { units: _units, ...docSettings } = docData.document;
       void _units;
       this.set({ doc: docSettings, guides: docData.guides ?? { vertical: [], horizontal: [] } });
-      this.clearPixelSelection();
+      this.clearPixelSelection({ commit: false });
       this.resetNameCounters();
     } finally {
       this.restoring = false;
@@ -2410,7 +2443,7 @@ export class Editor {
     const { artboards: _old, ...docRest } = this.doc;
     void _old;
     this.set({ doc: { ...docRest, ...settings }, guides: { vertical: [], horizontal: [] } });
-    this.clearPixelSelection();
+    this.clearPixelSelection({ commit: false });
     this.nameCounters = {};
     this.history.reset(this.takeSnapshot('New document'));
     this.syncAll();
@@ -2481,7 +2514,7 @@ export class Editor {
             this.clearPixelSelection();
           } else if (this.tool.selectsRegion) {
             // With a marquee/lasso tool, Select All selects the whole artboard area.
-            this.selectRegion({ type: 'rect', x: 0, y: 0, w: this.doc.width, h: this.doc.height }, 'replace');
+            this.selectRegion({ type: 'rect', x: 0, y: 0, w: this.doc.width, h: this.doc.height }, 'replace', 'Select all');
           } else this.selectAll();
           return true;
         case 'c':

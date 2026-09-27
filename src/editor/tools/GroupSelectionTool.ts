@@ -19,12 +19,13 @@ import { deepHit } from './SelectTool';
 import { PaintLayer } from '../objects/PaintLayer';
 import { distance } from '../geometry';
 import { isEffectivelyLocked } from '../meta';
+import { groupSelectCursor } from '../cursors';
 
 const DRAG_THRESHOLD = 3;
 
 export class GroupSelectionTool extends Tool {
   readonly id = 'groupSelection' as const;
-  cursor = 'default';
+  cursor = groupSelectCursor();
 
   private down: { viewport: Point; last: Point; expand: boolean } | null = null;
   private dragging = false;

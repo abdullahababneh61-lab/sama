@@ -5,9 +5,10 @@
  *   at least one screen pixel — the same sampling approach as the brush) and
  *   drawn live, with a thin line back to the start showing how it will close.
  * - Releasing the button closes the shape automatically.
- * - Shift when starting adds to the existing selection; otherwise the new
- *   shape replaces it. Esc cancels a lasso in progress (or clears the
- *   selection). A click without dragging deselects.
+ * - Keys held when starting pick the mode (Shift = add, Alt = subtract,
+ *   both = intersect; otherwise the options-bar mode). Esc cancels a lasso in
+ *   progress (or clears the selection). A click without dragging deselects.
+ * - The shape's live size shows next to the pointer while drawing.
  */
 import type { Point } from 'fabric';
 import { RegionTool } from './RegionTool';
@@ -23,6 +24,11 @@ export class LassoTool extends RegionTool {
   private points: XY[] = [];
   private lastViewport: Point | null = null;
   private mode: CombineMode = 'replace';
+  private pointer: Point | null = null;
+
+  protected get historyLabel() {
+    return 'Lasso';
+  }
 
   protected get busy() {
     return this.points.length > 0;
@@ -40,6 +46,7 @@ export class LassoTool extends RegionTool {
   }
 
   onPointerMove(ev: ToolPointerEvent) {
+    this.pointer = ev.viewportPoint;
     if (!this.points.length || !this.lastViewport) return;
     const d = Math.hypot(ev.viewportPoint.x - this.lastViewport.x, ev.viewportPoint.y - this.lastViewport.y);
     if (d < SAMPLE_SPACING) return;
@@ -53,15 +60,12 @@ export class LassoTool extends RegionTool {
     const points = this.points;
     const mode = this.mode;
     this.cancel();
-    if (points.length < 3 || polygonArea(points) < 1) {
-      if (mode === 'replace') this.editor.clearPixelSelection();
-    } else {
-      this.editor.selectRegion({ type: 'polygon', points }, mode);
-    }
+    if (points.length < 3 || polygonArea(points) < 1) this.clickWithoutShape(mode);
+    else this.commitShape({ type: 'polygon', points }, mode);
     this.editor.canvas.requestRenderAll();
   }
 
-  renderOverlay(ctx: CanvasRenderingContext2D) {
+  protected renderPreview(ctx: CanvasRenderingContext2D) {
     if (this.points.length < 2) return;
     const pts = this.toViewport(this.points);
     this.strokePreview(ctx, (c) => {
@@ -76,6 +80,7 @@ export class LassoTool extends RegionTool {
     ctx.lineTo(pts[0].x, pts[0].y);
     ctx.stroke();
     ctx.restore();
+    if (this.pointer) this.drawLabel(ctx, this.sizeOf(this.points), this.pointer);
   }
 }
 

@@ -32,6 +32,7 @@ export function computeEdges(rgba: Uint8ClampedArray, width: number, height: num
     const y = 0.299 * rgba[p] + 0.587 * rgba[p + 1] + 0.114 * rgba[p + 2];
     lum[i] = y * a + 255 * (1 - a);
   }
+  smooth3x3(lum, width, height);
   const strength = new Float32Array(n);
   let max = 0;
   for (let y = 0; y < height; y++) {
@@ -51,6 +52,21 @@ export function computeEdges(rgba: Uint8ClampedArray, width: number, height: num
   }
   if (max > 0) for (let i = 0; i < n; i++) strength[i] /= max;
   return { width, height, strength };
+}
+
+/** In-place 3×3 box blur (edges clamped): keeps photo noise from reading as edges. */
+function smooth3x3(v: Float32Array, w: number, h: number) {
+  const tmp = new Float32Array(v.length);
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    for (let x = 0; x < w; x++) tmp[row + x] = (v[row + Math.max(0, x - 1)] + v[row + x] + v[row + Math.min(w - 1, x + 1)]) / 3;
+  }
+  for (let y = 0; y < h; y++) {
+    const up = Math.max(0, y - 1) * w;
+    const mid = y * w;
+    const down = Math.min(h - 1, y + 1) * w;
+    for (let x = 0; x < w; x++) v[mid + x] = (tmp[up + x] + tmp[mid + x] + tmp[down + x]) / 3;
+  }
 }
 
 /** Minimum edge strength that counts as "an edge" for snapping. */

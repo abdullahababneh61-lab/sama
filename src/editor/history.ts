@@ -17,6 +17,7 @@
  * tested in isolation.
  */
 import type { DocumentSettings } from './types';
+import { sameSelection, type EncodedSelection } from './pixelSelection';
 
 export interface SnapshotObject {
   id: string;
@@ -30,6 +31,8 @@ export interface Snapshot {
   objects: SnapshotObject[];
   /** Ids selected when the snapshot was taken (restored on undo/redo). */
   selection: string[];
+  /** The region (marching ants) selection, run-length encoded; null/absent = none. */
+  pixelSelection?: EncodedSelection | null;
 }
 
 export const DEFAULT_HISTORY_LIMIT = 100;
@@ -126,7 +129,8 @@ export function snapshotsEqual(a: Snapshot, b: Snapshot) {
     a.doc.height !== b.doc.height ||
     a.doc.background !== b.doc.background ||
     a.doc.name !== b.doc.name ||
-    JSON.stringify(a.doc.artboards ?? []) !== JSON.stringify(b.doc.artboards ?? [])
+    JSON.stringify(a.doc.artboards ?? []) !== JSON.stringify(b.doc.artboards ?? []) ||
+    !sameSelection(a.pixelSelection, b.pixelSelection)
   ) {
     return false;
   }

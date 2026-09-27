@@ -9,7 +9,10 @@
  * - Close: click the first point, double-click, or press Enter (the last
  *   stretch back to the start also follows edges).
  * - Backspace/Delete removes the last anchor; Esc cancels.
- * - Shift on the first click adds to the existing selection.
+ * - Keys held on the first click pick the mode (Shift = add, Alt =
+ *   subtract, both = intersect; otherwise the options-bar mode).
+ * - A circle around the pointer shows how far it looks for an edge (the
+ *   width), and the outline's live size shows next to it.
  *
  * How it finds edges: when you start, the artboard is rendered once and an
  * edge-strength map is computed from it (Sobel gradient of brightness). The
@@ -81,7 +84,11 @@ export class MagneticLassoTool extends RegionTool {
   onPointerMove(ev: ToolPointerEvent) {
     this.hoverScene = ev.scenePoint;
     this.hoverViewport = ev.viewportPoint;
-    if (!this.path.length || this.frame) return;
+    if (!this.path.length) {
+      this.editor.canvas.requestRenderAll(); // move the width circle
+      return;
+    }
+    if (this.frame) return;
     // Path finding runs at most once per frame.
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;
@@ -110,7 +117,28 @@ export class MagneticLassoTool extends RegionTool {
     return super.onKeyDown(e);
   }
 
-  renderOverlay(ctx: CanvasRenderingContext2D) {
+  protected get historyLabel() {
+    return 'Magnetic Lasso';
+  }
+
+  protected renderPreview(ctx: CanvasRenderingContext2D) {
+    // Edge-search width around the pointer (on the artboard only).
+    const hv = this.hoverViewport;
+    const hs = this.hoverScene;
+    const { width, height } = this.editor.doc;
+    if (hv && hs && hs.x >= 0 && hs.y >= 0 && hs.x < width && hs.y < height) {
+      const r = WIDTH * this.editor.canvas.getZoom();
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(hv.x, hv.y, r, 0, Math.PI * 2);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.stroke();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.stroke();
+      ctx.restore();
+    }
     if (!this.path.length) return;
     const fixed = this.toViewport(this.path);
     const live = this.toViewport(this.live);
@@ -130,6 +158,7 @@ export class MagneticLassoTool extends RegionTool {
       ctx.strokeRect(p.x - r + 0.5, p.y - r + 0.5, r * 2 - 1, r * 2 - 1);
     }
     ctx.restore();
+    if (hv) this.drawLabel(ctx, this.sizeOf([...this.path, ...this.live]), hv);
   }
 
   // ---------------------------------------------------------------------------
@@ -201,7 +230,7 @@ export class MagneticLassoTool extends RegionTool {
     const points = this.path;
     const mode = this.mode;
     this.cancel();
-    if (points.length >= 3) this.editor.selectRegion({ type: 'polygon', points }, mode);
+    if (points.length >= 3) this.commitShape({ type: 'polygon', points }, mode);
     this.editor.canvas.requestRenderAll();
   }
 

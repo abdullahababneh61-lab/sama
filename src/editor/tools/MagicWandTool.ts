@@ -7,7 +7,11 @@
  * - Contiguous (on by default): only layers connected to the clicked one —
  *   touching or overlapping it, directly or through other matching layers.
  *   Off: every matching layer in the document.
- * - Shift+click: add to the current selection. Esc: deselect.
+ * - Mode (options bar): New, Add, Subtract or Intersect. Keys held on the
+ *   click override it: Shift = add, Alt/Option = subtract, Shift+Alt =
+ *   intersect. The cursor shows the mode (+ / − / × next to the wand).
+ * - Clicking empty canvas deselects in New mode (keeps the selection
+ *   otherwise). Esc: deselect.
  *
  * A layer's colour is its solid fill; layers without a fill (lines, open
  * paths, outlined shapes) use their solid stroke colour instead. Layers
@@ -20,11 +24,15 @@
 import { Color, type FabricObject } from 'fabric';
 import { Tool, type ToolPointerEvent } from './Tool';
 import { isEffectivelyLocked } from '../meta';
+import { combineLayers, resolveSelectionMode } from '../selectionModes';
+import { wandCursor } from '../cursors';
+import { ModeCursor } from './modeCursor';
 
 export class MagicWandTool extends Tool {
   readonly id = 'magicWand' as const;
-  cursor = 'crosshair';
+  cursor = wandCursor('new');
 
+  private readonly modeCursor = new ModeCursor(this.editor, (mods) => wandCursor(this.modeFor(mods)));
   private hover: FabricObject | null = null;
   /** Selection when the button went down (Fabric clears it before our handler runs). */
   private before: FabricObject[] = [];
@@ -35,10 +43,12 @@ export class MagicWandTool extends Tool {
     this.offBefore = this.editor.canvas.on('mouse:down:before', () => {
       this.before = this.editor.canvas.getActiveObjects();
     });
+    this.modeCursor.start();
     this.editor.canvas.requestRenderAll();
   }
 
   deactivate() {
+    this.modeCursor.stop();
     this.offBefore?.();
     this.offBefore = null;
     this.hover = null;
@@ -52,24 +62,26 @@ export class MagicWandTool extends Tool {
     }
   }
 
+  onOptionsChanged() {
+    this.modeCursor.refresh();
+  }
+
   onPointerDown(ev: ToolPointerEvent) {
+    const mode = this.modeFor(ev);
     const hit = this.editor.layerAt(ev.scenePoint);
-    if (!hit) {
-      // Shift+click on empty canvas keeps the selection.
-      if (ev.shift) this.editor.selectObjects(this.before);
-      else this.editor.clearSelection();
-      return;
-    }
     const { tolerance, contiguous } = this.editor.toolOptions.magicWand;
-    const matches = similarLayers(this.editor.canvas.getObjects(), hit, tolerance, contiguous);
-    let next = matches;
-    if (ev.shift) {
-      const current = this.before.filter((o) => !o.parent);
-      next = [...current, ...matches.filter((o) => !current.includes(o))];
-    }
+    const picked = hit ? similarLayers(this.editor.canvas.getObjects(), hit, tolerance, contiguous) : [];
+    const current = this.before.filter((o) => !o.parent);
+    const next = combineLayers(current, picked, mode);
     const order = this.editor.canvas.getObjects();
     next.sort((a, b) => order.indexOf(a) - order.indexOf(b));
-    this.editor.selectObjects(next);
+    if (next.length) this.editor.selectObjects(next);
+    else this.editor.clearSelection();
+  }
+
+  /** The tool's mode, overridden by the keys held. */
+  private modeFor(mods: { shift: boolean; alt: boolean }) {
+    return resolveSelectionMode(this.editor.selectionModeOf(this.id), mods);
   }
 
   renderOverlay(ctx: CanvasRenderingContext2D) {

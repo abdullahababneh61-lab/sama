@@ -24,6 +24,7 @@ export function TopBar({ actions, extra }: { actions: TopBarActions; extra?: Rea
   const zoom = useWorkspace((s) => s.zoom);
   const doc = useWorkspace((s) => s.doc);
   const selection = useWorkspace((s) => s.selection);
+  const region = useWorkspace((s) => s.pixelSelection);
   const view = {
     rulers: useWorkspace((s) => s.showRulers),
     guides: useWorkspace((s) => s.showGuides),
@@ -63,7 +64,15 @@ export function TopBar({ actions, extra }: { actions: TopBarActions; extra?: Rea
         { label: t('menu.delete'), shortcut: 'Del', disabled: !has, onSelect: () => editor?.deleteSelection() },
         { type: 'separator' },
         { label: t('menu.selectAll'), shortcut: k('Mod+A'), onSelect: () => editor?.selectAll() },
-        { label: t('menu.deselect'), shortcut: k('Mod+Shift+A'), disabled: !has, onSelect: () => editor?.clearSelection() },
+        {
+          label: t('menu.deselect'),
+          shortcut: k('Mod+Shift+A'),
+          disabled: !has && !region,
+          onSelect: () => {
+            editor?.clearSelection();
+            editor?.clearPixelSelection();
+          },
+        },
       ],
     },
     {

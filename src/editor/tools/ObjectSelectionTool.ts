@@ -9,8 +9,12 @@
  *   with at least half of its bounding box covered by the box. That takes
  *   in layers fully contained and layers significantly overlapping, and
  *   leaves out ones the box only grazes.
- * - Shift: add to the current selection (Shift+click a selected layer to
- *   remove it). Esc: deselect.
+ * - Mode (options bar): New, Add, Subtract or Intersect. Keys held when
+ *   the click/drag starts override it: Shift = add, Alt/Option = subtract,
+ *   Shift+Alt = intersect. Shift+click on a layer that's already selected
+ *   removes it (like the Selection tool). The cursor shows the mode.
+ * - Clicking empty canvas deselects in New mode (keeps the selection
+ *   otherwise). Esc cancels a box being drawn, otherwise deselects.
  *
  * This tool only selects; switch to the Selection tool (V) to move or
  * resize what it selected. Hidden and locked layers are never picked.
@@ -19,6 +23,10 @@ import type { FabricObject, Point } from 'fabric';
 import { Tool, type ToolPointerEvent } from './Tool';
 import { distance } from '../geometry';
 import { isEffectivelyLocked } from '../meta';
+import { combineLayers, resolveSelectionMode } from '../selectionModes';
+import { crosshairCursor } from '../cursors';
+import type { SelectionMode } from '../types';
+import { ModeCursor } from './modeCursor';
 
 const DRAG_THRESHOLD = 3;
 /** Share of a layer's bounding box the drag box must cover to select it. */
@@ -26,13 +34,18 @@ export const OBJECT_BOX_COVERAGE = 0.5;
 
 export class ObjectSelectionTool extends Tool {
   readonly id = 'objectSelection' as const;
-  cursor = 'crosshair';
+  cursor = crosshairCursor('new');
 
   private start: Point | null = null;
   private startViewport: Point | null = null;
   private current: Point | null = null;
   private dragging = false;
-  private add = false;
+  private mode: SelectionMode = 'new';
+  private readonly modeCursor = new ModeCursor(
+    this.editor,
+    (mods) => crosshairCursor(this.modeFor(mods)),
+    () => this.start !== null,
+  );
   /** Selection when the button went down (Fabric clears it before our handler runs). */
   private before: FabricObject[] = [];
   private offBefore: (() => void) | null = null;
@@ -43,10 +56,12 @@ export class ObjectSelectionTool extends Tool {
     this.offBefore = this.editor.canvas.on('mouse:down:before', () => {
       this.before = this.editor.canvas.getActiveObjects();
     });
+    this.modeCursor.start();
     this.editor.canvas.requestRenderAll();
   }
 
   deactivate() {
+    this.modeCursor.stop();
     this.offBefore?.();
     this.offBefore = null;
     this.start = this.current = null;
@@ -58,7 +73,16 @@ export class ObjectSelectionTool extends Tool {
     this.startViewport = ev.viewportPoint;
     this.current = ev.scenePoint;
     this.dragging = false;
-    this.add = ev.shift;
+    this.mode = this.modeFor(ev);
+  }
+
+  onOptionsChanged() {
+    this.modeCursor.refresh();
+  }
+
+  /** The tool's mode, overridden by the keys held. */
+  private modeFor(mods: { shift: boolean; alt: boolean }): SelectionMode {
+    return resolveSelectionMode(this.editor.selectionModeOf(this.id), mods);
   }
 
   onPointerMove(ev: ToolPointerEvent) {
@@ -88,13 +112,15 @@ export class ObjectSelectionTool extends Tool {
         o.setCoords();
         return boxCoverage(o.getBoundingRect(), box) >= OBJECT_BOX_COVERAGE;
       });
-      this.select(hits, this.add ? 'add' : 'replace');
+      this.select(hits, this.mode);
     } else {
       const hit = this.editor.layerAt(ev.scenePoint);
-      if (hit) this.select([hit], this.add ? 'toggle' : 'replace');
-      else if (this.add) this.select([], 'add'); // Shift+click on empty canvas keeps the selection
-      else this.editor.clearSelection();
+      const current = this.before.filter((o) => !o.parent);
+      // Shift+click on a selected layer takes it out (as with the Selection tool).
+      const toggleOff = hit !== null && ev.shift && !ev.alt && current.includes(hit);
+      this.select(hit ? [hit] : [], toggleOff ? 'subtract' : this.mode);
     }
+    this.modeCursor.refresh();
     this.editor.canvas.requestRenderAll();
   }
 
@@ -140,14 +166,12 @@ export class ObjectSelectionTool extends Tool {
   }
 
   /** Applies a selection change to top-level layers. */
-  private select(objs: FabricObject[], mode: 'replace' | 'add' | 'toggle') {
-    const current = this.before.filter((o) => !o.parent);
-    let next = objs;
-    if (mode === 'add') next = [...current, ...objs.filter((o) => !current.includes(o))];
-    else if (mode === 'toggle') {
-      const o = objs[0];
-      next = current.includes(o) ? current.filter((c) => c !== o) : [...current, o];
-    }
+  private select(objs: FabricObject[], mode: SelectionMode) {
+    const next = combineLayers(
+      this.before.filter((o) => !o.parent),
+      objs,
+      mode,
+    );
     // Keep stacking order (bottom to top) for a predictable multi-selection.
     const order = this.editor.canvas.getObjects();
     next.sort((p, q) => order.indexOf(p) - order.indexOf(q));

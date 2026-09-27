@@ -272,6 +272,17 @@
   align-items: center;
   gap: 8px;
 }
+/* Text buttons in the bar sit close together, like toolbar items. */
+.sw-options .sw-btn {
+  padding: 0 7px;
+}
+.sw-options__cluster > .sw-btn + .sw-btn {
+  margin-inline-start: -4px;
+}
+.sw-options__readout {
+  font-variant-numeric: tabular-nums;
+  min-width: 84px;
+}
 .sw-options__caption {
   color: var(--sw-text-3);
   margin-inline-start: 6px;
@@ -512,6 +523,22 @@
   color: #fff;
   font: 500 11px system-ui, -apple-system, 'Segoe UI', sans-serif;
   outline: none;
+}
+.sw-brush-cursor[data-mode='add']::after,
+.sw-brush-cursor[data-mode='subtract']::after {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font: 600 13px/1 system-ui, sans-serif;
+  text-shadow: 0 0 2px #000, 0 0 2px #000;
+}
+.sw-brush-cursor[data-mode='add']::after {
+  content: '+';
+}
+.sw-brush-cursor[data-mode='subtract']::after {
+  content: '−';
 }
 .sw-brush-cursor {
   position: absolute;

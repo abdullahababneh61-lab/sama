@@ -11,6 +11,10 @@ import type { SelectionShape } from '../pixelSelection';
 export class EllipseMarqueeTool extends MarqueeTool {
   readonly id = 'ellipseMarquee' as const;
 
+  protected get historyLabel() {
+    return 'Elliptical Marquee';
+  }
+
   protected shapeFor(box: Box): SelectionShape {
     return { type: 'ellipse', cx: box.x + box.w / 2, cy: box.y + box.h / 2, rx: box.w / 2, ry: box.h / 2 };
   }

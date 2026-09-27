@@ -10,6 +10,10 @@ import type { SelectionShape } from '../pixelSelection';
 export class RectMarqueeTool extends MarqueeTool {
   readonly id = 'rectMarquee' as const;
 
+  protected get historyLabel() {
+    return 'Rectangular Marquee';
+  }
+
   protected shapeFor(box: Box): SelectionShape {
     return { type: 'rect', x: box.x, y: box.y, w: box.w, h: box.h };
   }

@@ -40,10 +40,51 @@ export type SelectionShape =
   | { type: 'polygon'; points: XY[] };
 
 /** How a new shape combines with the existing selection. */
-export type CombineMode = 'replace' | 'add' | 'subtract';
+export type CombineMode = 'replace' | 'add' | 'subtract' | 'intersect';
 
 /** Upper bound on mask size (4096² ≈ 16.7 M bytes). */
 export const MAX_MASK_PIXELS = 4096 * 4096;
+
+/** A run-length encoded selection mask (see `PixelSelection.encode`). */
+export interface EncodedSelection {
+  width: number;
+  height: number;
+  /** Pairs of (run length, value). */
+  runs: Uint32Array;
+}
+
+/** Run-length encodes a byte mask as (length, value) pairs. */
+export function encodeRuns(mask: Uint8Array): Uint32Array {
+  const out: number[] = [];
+  let i = 0;
+  while (i < mask.length) {
+    const v = mask[i];
+    let j = i + 1;
+    while (j < mask.length && mask[j] === v) j++;
+    out.push(j - i, v);
+    i = j;
+  }
+  return Uint32Array.from(out);
+}
+
+export function decodeRuns(runs: Uint32Array, length: number): Uint8Array {
+  const out = new Uint8Array(length);
+  let i = 0;
+  for (let k = 0; k < runs.length; k += 2) {
+    out.fill(runs[k + 1], i, i + runs[k]);
+    i += runs[k];
+  }
+  return out;
+}
+
+/** Equal encoded selections (null = no selection). */
+export function sameSelection(a: EncodedSelection | null | undefined, b: EncodedSelection | null | undefined): boolean {
+  if (!a || !b) return !a && !b;
+  if (a === b) return true;
+  if (a.width !== b.width || a.height !== b.height || a.runs.length !== b.runs.length) return false;
+  for (let i = 0; i < a.runs.length; i++) if (a.runs[i] !== b.runs[i]) return false;
+  return true;
+}
 
 export interface SelectionBounds {
   x: number;
@@ -101,6 +142,28 @@ export class PixelSelection {
     this.changed();
   }
 
+  private encodedCache: { version: number; value: EncodedSelection | null } | null = null;
+
+  /**
+   * A compact, immutable copy of the selection (run-length encoded), for the
+   * undo history. Selections are mostly long runs of 0 or 255, so this is
+   * typically a few kilobytes. Cached until the selection changes.
+   */
+  encode(): EncodedSelection | null {
+    if (this.encodedCache?.version === this.version) return this.encodedCache.value;
+    const value = this.isEmpty ? null : { width: this.width, height: this.height, runs: encodeRuns(this.mask!) };
+    this.encodedCache = { version: this.version, value };
+    return value;
+  }
+
+  /** Restores a selection produced by `encode()` (ignored if the mask size no longer matches). */
+  restore(encoded: EncodedSelection | null) {
+    if (!encoded) return this.clear();
+    if (encoded.width !== this.width || encoded.height !== this.height) return this.clear();
+    this.mask = decodeRuns(encoded.runs, this.width * this.height);
+    this.changed();
+  }
+
   /** Is the artboard point (scene coordinates) selected? */
   contains(x: number, y: number): boolean {
     if (!this.mask) return false;
@@ -124,7 +187,8 @@ export class PixelSelection {
     } else {
       const m = this.mask ?? new Uint8Array(this.width * this.height);
       if (mode === 'add') for (let i = 0; i < m.length; i++) m[i] = Math.max(m[i], shapeMask[i]);
-      else for (let i = 0; i < m.length; i++) m[i] = Math.min(m[i], 255 - shapeMask[i]);
+      else if (mode === 'subtract') for (let i = 0; i < m.length; i++) m[i] = Math.min(m[i], 255 - shapeMask[i]);
+      else for (let i = 0; i < m.length; i++) m[i] = Math.min(m[i], shapeMask[i]); // intersect
       this.mask = m;
     }
     this.changed();
@@ -514,6 +578,20 @@ export function rasterizePolygon(w: number, h: number, pts: XY[]): Uint8Array {
   return m;
 }
 
+/** Average RGBA of the (2r+1)² pixels around (x, y), clamped to the image — a noise-robust sample. */
+export function averageColor(rgba: Uint8ClampedArray, w: number, h: number, x: number, y: number, r: number): [number, number, number, number] {
+  const sum = [0, 0, 0, 0];
+  let n = 0;
+  for (let j = Math.max(0, y - r); j <= Math.min(h - 1, y + r); j++) {
+    for (let i = Math.max(0, x - r); i <= Math.min(w - 1, x + r); i++) {
+      const p = (j * w + i) * 4;
+      for (let c = 0; c < 4; c++) sum[c] += rgba[p + c];
+      n++;
+    }
+  }
+  return sum.map((v) => v / Math.max(1, n)) as [number, number, number, number];
+}
+
 /** Stamps a filled circle into `mask` (mask coordinates). */
 export function stampCircle(mask: Uint8Array, w: number, h: number, cx: number, cy: number, r: number, value: 0 | 1 = 1) {
   const y0 = Math.max(0, Math.floor(cy - r));
@@ -543,15 +621,14 @@ export function floodFill(
   sy: number,
   tolerance: number,
   out: Uint8Array,
+  /** Colour to compare with (RGBA); defaults to the start pixel's colour. */
+  seedColor?: [number, number, number, number],
 ): number {
   sx = Math.floor(sx);
   sy = Math.floor(sy);
   if (sx < 0 || sy < 0 || sx >= w || sy >= h) return 0;
   const seed = (sy * w + sx) * 4;
-  const r0 = rgba[seed];
-  const g0 = rgba[seed + 1];
-  const b0 = rgba[seed + 2];
-  const a0 = rgba[seed + 3];
+  const [r0, g0, b0, a0] = seedColor ?? [rgba[seed], rgba[seed + 1], rgba[seed + 2], rgba[seed + 3]];
   const visited = new Uint8Array(w * h);
   const similar = (i: number) => {
     const p = i * 4;

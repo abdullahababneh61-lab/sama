@@ -2,12 +2,14 @@
  * Drag-to-select logic shared by the Rectangular and Elliptical Marquee
  * tools (each is its own tool class; they only differ in the shape made).
  *
- * - Drag: draws the selection box (snapped to whole artboard pixels).
- * - Shift: square/circle. Holding Shift when the drag *starts* adds to the
- *   existing selection instead; to also constrain the shape, release and
- *   press Shift again during the drag (Photoshop's behaviour).
- * - Alt/Option: draw from the centre.
- * - A plain click (no drag) clears the selection.
+ * - Drag: draws the selection box, its edges snapped to the pixel grid, with
+ *   its live size next to the pointer.
+ * - Keys held when the drag *starts* pick the selection mode (Shift = add,
+ *   Alt = subtract, both = intersect; otherwise the options-bar mode).
+ * - During the drag, Shift = square/circle and Alt = from the centre. A key
+ *   already held at the start only takes that meaning after being released
+ *   and pressed again (Photoshop's behaviour).
+ * - A plain click (no drag) in New mode deselects.
  */
 import type { Point } from 'fabric';
 import { RegionTool } from './RegionTool';
@@ -25,6 +27,8 @@ export abstract class MarqueeTool extends RegionTool {
   private mode: CombineMode = 'replace';
   private startedWithShift = false;
   private shiftReleased = false;
+  private startedWithAlt = false;
+  private altReleased = false;
   private moved = false;
   private pointer: Point | null = null;
 
@@ -47,6 +51,8 @@ export abstract class MarqueeTool extends RegionTool {
     this.mode = this.modeFor(ev);
     this.startedWithShift = ev.shift;
     this.shiftReleased = !ev.shift;
+    this.startedWithAlt = ev.alt;
+    this.altReleased = !ev.alt;
     this.moved = false;
     this.box = null;
   }
@@ -55,10 +61,12 @@ export abstract class MarqueeTool extends RegionTool {
     this.pointer = ev.viewportPoint;
     if (!this.start || !this.startViewport) return;
     if (!ev.shift) this.shiftReleased = true;
+    if (!ev.alt) this.altReleased = true;
     if (!this.moved && distance(ev.viewportPoint, this.startViewport) < DRAG_THRESHOLD) return;
     this.moved = true;
     const constrain = ev.shift && (!this.startedWithShift || this.shiftReleased);
-    this.box = snapToPixels(dragBox(this.start, ev.scenePoint, constrain, ev.alt), constrain);
+    const fromCentre = ev.alt && (!this.startedWithAlt || this.altReleased);
+    this.box = snapToPixels(dragBox(this.start, ev.scenePoint, constrain, fromCentre), constrain);
     this.editor.canvas.requestRenderAll();
   }
 
@@ -68,16 +76,12 @@ export abstract class MarqueeTool extends RegionTool {
     const mode = this.mode;
     const moved = this.moved;
     this.cancel();
-    if (!moved || !box) {
-      // A plain click deselects (Shift+click keeps the selection).
-      if (mode === 'replace') this.editor.clearPixelSelection();
-    } else {
-      this.editor.selectRegion(this.shapeFor(box), mode);
-    }
+    if (!moved || !box) this.clickWithoutShape(mode);
+    else this.commitShape(this.shapeFor(box), mode);
     this.editor.canvas.requestRenderAll();
   }
 
-  renderOverlay(ctx: CanvasRenderingContext2D) {
+  protected renderPreview(ctx: CanvasRenderingContext2D) {
     const box = this.box;
     if (!box) return;
     this.strokePreview(ctx, (c) => this.tracePreview(c, box));
@@ -92,9 +96,16 @@ export abstract class MarqueeTool extends RegionTool {
   }
 }
 
-/** Rounds a box to whole artboard pixels (at least 1×1); a square stays square. */
-function snapToPixels(b: Box, square: boolean): Box {
-  const w = Math.max(1, Math.round(b.w));
-  const h = square ? w : Math.max(1, Math.round(b.h));
-  return { x: Math.round(b.x), y: Math.round(b.y), w, h };
+/**
+ * Snaps a box to the pixel grid: each edge goes to the nearest pixel
+ * boundary (at least 1×1). A constrained (square) box keeps equal sides,
+ * measured from its left/top edge.
+ */
+export function snapToPixels(b: Box, square: boolean): Box {
+  const x0 = Math.round(b.x);
+  const y0 = Math.round(b.y);
+  let w = Math.max(1, Math.round(b.x + b.w) - x0);
+  let h = Math.max(1, Math.round(b.y + b.h) - y0);
+  if (square) w = h = Math.max(w, h);
+  return { x: x0, y: y0, w, h };
 }
