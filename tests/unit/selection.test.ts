@@ -22,6 +22,7 @@ import { boxCoverage } from '../../src/editor/tools/ObjectSelectionTool';
 import { colorDistance, layerColor, similarLayers } from '../../src/editor/tools/MagicWandTool';
 import { resized } from '../../src/editor/tools/ArtboardTool';
 import { polygonArea } from '../../src/editor/tools/LassoTool';
+import { classifyCoverage } from '../../src/editor/selectionDelete';
 
 const sum = (m: Uint8Array) => m.reduce((a, b) => a + b, 0);
 
@@ -248,5 +249,30 @@ describe('magic wand', () => {
     expect(similarLayers(layers, a, 32, false)).toEqual([a, b, c]);
     expect(similarLayers(layers, a, 0, false)).toEqual([a, c]);
     expect(similarLayers(layers, d, 32, true)).toEqual([d]);
+  });
+});
+
+describe('delete inside a selection: vector coverage', () => {
+  // 4×1 strip: alpha per pixel.
+  const rgba = (alphas: number[]) => {
+    const d = new Uint8ClampedArray(alphas.length * 4);
+    alphas.forEach((a, i) => (d[i * 4 + 3] = a));
+    return d;
+  };
+  it('full when every solid pixel is selected (soft edges ignored)', () => {
+    expect(classifyCoverage(rgba([0, 255, 255, 60]), new Uint8Array([0, 1, 1, 0]), false)).toBe('full');
+  });
+  it('partial when a solid pixel is outside the selection', () => {
+    expect(classifyCoverage(rgba([255, 255, 255, 0]), new Uint8Array([0, 1, 1, 0]), false)).toBe('partial');
+  });
+  it('none when no pixel of the layer is selected', () => {
+    expect(classifyCoverage(rgba([255, 255, 0, 0]), new Uint8Array([0, 0, 1, 1]), false)).toBe('none');
+  });
+  it('hairlines (no solid pixel) use half-covered pixels', () => {
+    expect(classifyCoverage(rgba([0, 140, 200, 0]), new Uint8Array([0, 1, 1, 0]), false)).toBe('full');
+    expect(classifyCoverage(rgba([0, 140, 200, 0]), new Uint8Array([0, 1, 0, 0]), false)).toBe('partial');
+  });
+  it('a layer reaching beyond the artboard is never fully covered', () => {
+    expect(classifyCoverage(rgba([255, 255, 255, 255]), new Uint8Array([1, 1, 1, 1]), true)).toBe('partial');
   });
 });

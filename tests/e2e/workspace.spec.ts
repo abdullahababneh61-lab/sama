@@ -1003,14 +1003,11 @@ test.describe('marquee tools', () => {
     expectNoErrors(errors);
   });
 
-  test('region selections: Delete shows a notice, Invert, Crop to Selection, persist across tools', async ({ page }) => {
+  test('region selections: Invert, Crop to Selection, persist across tools', async ({ page }) => {
     const errors = await openWorkspace(page);
     await addRect(page, '#e5484d', [100, 100], [300, 300]);
     await page.keyboard.press('Shift+M');
     await drag(page, [50, 50], [450, 350]);
-    await page.keyboard.press('Delete');
-    expect(await page.evaluate(() => (window as any).samaEditor.store.getState().toast?.message)).toBe('toast.regionDeleteUnsupported');
-    expect((await workspaceState(page)).layers).toHaveLength(1);
     await page.keyboard.press('b');
     expect(await region(page)).not.toBeNull();
     await page.keyboard.press('Shift+M');
@@ -1292,6 +1289,195 @@ test.describe('toolbar layout', () => {
     await page.keyboard.press('v');
     await page.locator('.sw-toolbar [data-tool=crop]').click();
     expect(await tool()).toBe('crop');
+    expectNoErrors(errors);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Delete / Backspace inside a region selection
+
+/** Imports a generated PNG (drawn by `draw` on a w×h canvas) as an image layer. */
+async function importDrawn(page: import('@playwright/test').Page, name: string, w: number, h: number, draw: string) {
+  const b64 = await page.evaluate(
+    ([w, h, draw]) => {
+      const c = document.createElement('canvas');
+      c.width = w as number;
+      c.height = h as number;
+      new Function('x', draw as string)(c.getContext('2d'));
+      return c.toDataURL('image/png').split(',')[1];
+    },
+    [w, h, draw],
+  );
+  await page.setInputFiles('[data-testid=image-input]', { name, mimeType: 'image/png', buffer: Buffer.from(b64, 'base64') });
+  await page.waitForTimeout(500);
+}
+/** RGBA of the clean artboard render at an artboard point. */
+const artPixel = (page: import('@playwright/test').Page, x: number, y: number) =>
+  page.evaluate(
+    ([x, y]) => {
+      const p = (window as any).samaEditor.renderArtboardPixels();
+      const i = (Math.floor(y) * p.width + Math.floor(x)) * 4;
+      return Array.from(p.data.slice(i, i + 4)) as number[];
+    },
+    [x, y],
+  );
+
+test.describe('delete inside a selection', () => {
+  test('Quick Selection + Delete: exact shape becomes transparent, artboard unchanged, one undo', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.evaluate(() => (window as any).samaEditor.newDocument({ width: 900, height: 900, background: null }));
+    // Grass with a brown "body" and a darker "head" (Quick Selection stops at the head).
+    await importDrawn(
+      page,
+      'horse.png',
+      900,
+      900,
+      "x.fillStyle='#5f8f3a';x.fillRect(0,0,900,900);x.fillStyle='#8b5a2b';x.beginPath();x.ellipse(450,480,250,100,0,0,Math.PI*2);x.fill();x.fillStyle='#4a2c12';x.beginPath();x.ellipse(395,330,60,40,0,0,Math.PI*2);x.fill();",
+    );
+    const T = await page.evaluate(() => {
+      const o = (window as any).samaEditor.canvas.getObjects()[0];
+      o.setCoords();
+      const r = o.getBoundingRect();
+      return { x: r.left, y: r.top, s: r.width / 900 };
+    });
+    const A = (x: number, y: number): [number, number] => [T.x + x * T.s, T.y + y * T.s];
+    await page.keyboard.press('Shift+W');
+    await drag(page, A(350, 480), A(550, 480));
+    expect(await regionHas(page, ...A(450, 480))).toBe(true);
+    expect(await regionHas(page, ...A(395, 330))).toBe(false); // head not selected
+    // Snapshots stay in the page (copying megapixel arrays to the test runner is slow).
+    await page.evaluate(() => {
+      const w = window as any;
+      const ed = w.samaEditor;
+      w.__source = () => {
+        const el = ed.canvas.getObjects()[0].getElement();
+        const c = document.createElement('canvas');
+        c.width = el.naturalWidth || el.width;
+        c.height = el.naturalHeight || el.height;
+        const k = c.getContext('2d')!;
+        k.drawImage(el, 0, 0);
+        return k.getImageData(0, 0, c.width, c.height).data;
+      };
+      w.__mask = ed.pixelSelection.getMask();
+      w.__before = w.__source();
+      w.__beforeArt = ed.renderArtboardPixels().data;
+    });
+    await page.keyboard.press('Delete');
+    await expect.poll(async () => (await workspaceState(page)).history.labels.at(-1)).toBe('Delete selection');
+    // Every changed image pixel lies inside the selection's exact shape and is now fully transparent.
+    const result = await page.evaluate((T) => {
+      const w = window as any;
+      const after = w.__source();
+      let changed = 0;
+      let wrong = 0;
+      for (let y = 0; y < 900; y++) {
+        for (let x = 0; x < 900; x++) {
+          const i = (y * 900 + x) * 4;
+          if (w.__before[i + 3] === after[i + 3]) continue;
+          changed++;
+          const ax = Math.floor(T.x + (x + 0.5) * T.s);
+          const ay = Math.floor(T.y + (y + 0.5) * T.s);
+          if (w.__mask[ay * 900 + ax] !== 1 || after[i + 3] !== 0) wrong++;
+        }
+      }
+      return { changed, wrong };
+    }, T);
+    expect(result.changed).toBeGreaterThan(70000); // the body ellipse: π·250·100 ≈ 78,500 image px
+    expect(result.wrong).toBe(0);
+    expect((await artPixel(page, ...A(395, 330)))[3]).toBe(255); // head kept
+    expect((await artPixel(page, ...A(100, 100)))[3]).toBe(255); // grass kept
+    const doc = await page.evaluate(() => (window as any).samaEditor.store.getState().doc);
+    expect([doc.width, doc.height]).toEqual([900, 900]);
+    expect(await region(page)).toBeNull();
+    await page.keyboard.press('Control+z');
+    await settle(page);
+    await page.waitForTimeout(300);
+    const restored = await page.evaluate(() => {
+      const w = window as any;
+      const same = (a: Uint8ClampedArray, b: Uint8ClampedArray) => a.length === b.length && a.every((v, i) => v === b[i]);
+      return { source: same(w.__source(), w.__before), artboard: same(w.samaEditor.renderArtboardPixels().data, w.__beforeArt) };
+    });
+    expect(restored).toEqual({ source: true, artboard: true });
+    expectNoErrors(errors);
+  });
+
+  test('marquee + Delete across layers: images (rotated, grouped) lose pixels; covered vectors go; partial, hidden and locked stay', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.evaluate(() => (window as any).samaEditor.newDocument({ width: 1000, height: 1000, background: null }));
+    await importDrawn(page, 'red.png', 400, 400, "x.fillStyle='#ff0000';x.fillRect(0,0,400,400);");
+    await importDrawn(page, 'blue.png', 400, 400, "x.fillStyle='#0000ff';x.fillRect(0,0,400,400);");
+    await page.evaluate(() => {
+      const ed = (window as any).samaEditor;
+      const [red, blue] = ed.canvas.getObjects();
+      red.set({ left: 300, top: 300, scaleX: 1, scaleY: 1 });
+      blue.set({ left: 700, top: 300, angle: 30, scaleX: 0.5, scaleY: 0.5 });
+      red.setCoords();
+      blue.setCoords();
+      ed.commit('setup');
+    });
+    await page.evaluate(() => (window as any).samaEditor.updateToolOptions('shape', { fill: '#12a594', stroke: null }));
+    await addRect(page, '#12a594', [700, 700], [760, 760]); // Rectangle 1: fully inside
+    await page.keyboard.press('l');
+    await drag(page, [850, 600], [990, 680]); // Ellipse 1: half inside
+    await addRect(page, '#12a594', [600, 800], [650, 850]); // Rectangle 2: hidden
+    await addRect(page, '#12a594', [800, 800], [850, 850]); // Rectangle 3: locked
+    await page.keyboard.press('b');
+    await drag(page, [620, 880], [680, 890]); // Paint 1: one stroke, fully inside
+    await page.evaluate(() => {
+      const ed = (window as any).samaEditor;
+      const byName = (n: string) => ed.canvas.getObjects().find((o: any) => o.samaName === n);
+      byName('Rectangle 2').set('visible', false);
+      const locked = byName('Rectangle 3');
+      locked.set({ samaLocked: true, selectable: false, evented: false });
+      ed.commit('setup2');
+    });
+    await page.keyboard.press('Shift+M');
+    await drag(page, [200, 200], [900, 950]);
+    await page.keyboard.press('Backspace');
+    await expect.poll(async () => (await workspaceState(page)).history.labels.at(-1)).toBe('Delete selection');
+    const names = (await workspaceState(page)).layers.map((l) => l.name).sort();
+    expect(names).toEqual(['Ellipse 1', 'Rectangle 2', 'Rectangle 3', 'blue', 'red'].sort());
+    expect(await page.evaluate(() => (window as any).samaEditor.store.getState().toast?.message)).toBe('toast.selectionDeletePartialVectors');
+    expect((await artPixel(page, 300, 300))[3]).toBe(0); // red, inside
+    expect(await artPixel(page, 150, 300)).toEqual([255, 0, 0, 255]); // red, outside the marquee
+    expect((await artPixel(page, 700, 300))[3]).toBe(0); // rotated blue, inside
+    expect((await artPixel(page, 950, 640))[3]).toBe(255); // ellipse untouched
+    const doc = await page.evaluate(() => (window as any).samaEditor.store.getState().doc);
+    expect([doc.width, doc.height]).toEqual([1000, 1000]);
+    await page.keyboard.press('Control+z');
+    await settle(page);
+    await page.waitForTimeout(300);
+    expect((await workspaceState(page)).layers).toHaveLength(7);
+    expect(await artPixel(page, 300, 300)).toEqual([255, 0, 0, 255]);
+    expectNoErrors(errors);
+  });
+
+  test('a shape inside a group is deleted when fully selected; its sibling stays', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await addRect(page, '#e5484d', [200, 200], [260, 260]);
+    await addRect(page, '#3e63dd', [500, 500], [560, 560]);
+    await page.evaluate(() => {
+      const ed = (window as any).samaEditor;
+      ed.selectByIds(ed.store.getState().layers.map((l: any) => l.id));
+      ed.groupSelection();
+      const g = ed.canvas.getObjects()[0];
+      g.set({ left: g.left + 100, top: g.top + 50 });
+      g.setCoords();
+      ed.commit('move group');
+      ed.clearSelection();
+    });
+    await page.keyboard.press('q');
+    await drag(page, [280, 230], [390, 330]); // freehand-ish lasso around the moved first rectangle
+    await page.keyboard.press('Shift+L');
+    await clickAt(page, 280, 230);
+    await clickAt(page, 390, 230);
+    await clickAt(page, 390, 330);
+    await clickAt(page, 280, 330);
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Delete');
+    await expect.poll(async () => (await workspaceState(page)).history.labels.at(-1)).toBe('Delete selection');
+    const tree = (await workspaceState(page)).layers.map((l) => [l.name, (l.children ?? []).map((c: any) => c.name)]);
+    expect(tree).toEqual([['Group 1', ['Rectangle 2']]]);
     expectNoErrors(errors);
   });
 });

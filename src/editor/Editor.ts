@@ -42,6 +42,7 @@ import {
   findById,
   inferKind,
   isEffectivelyLocked,
+  isEffectivelyVisible,
   kindLabel,
   reassignIds,
   walkLayers,
@@ -111,6 +112,13 @@ import { GroupSelectionTool } from './tools/GroupSelectionTool';
 import { PixelSelection, type CombineMode, type SelectionShape } from './pixelSelection';
 import { SelectionAnts } from './SelectionAnts';
 import { renderArtboardPixels, type ScenePixels } from './scenePixels';
+import {
+  classifyCoverage,
+  eraseImagePixels,
+  renderLayerAlone,
+  selectionMaskCanvas,
+  withOffscreenRendering,
+} from './selectionDelete';
 import {
   ARTBOARD_LABEL_FONT,
   PASTEBOARD_COLOR,
@@ -964,7 +972,105 @@ export class Editor {
   /** The main artboard rendered at the region selection's resolution. */
   renderArtboardPixels(): ScenePixels {
     this.pixelSelection.fit(this.doc.width, this.doc.height);
-    return renderArtboardPixels(this.canvas.getObjects(), this.doc, this.pixelSelection.width, this.pixelSelection.height);
+    const { width, height } = this.pixelSelection;
+    // Off-view layers must be drawn too (Fabric skips them by default).
+    return withOffscreenRendering(this.canvas, () => renderArtboardPixels(this.canvas.getObjects(), this.doc, width, height));
+  }
+
+  private deletingInSelection = false;
+
+  /**
+   * Delete/Backspace with a region selection: removes the content inside the
+   * selection's exact shape, on every visible, unlocked layer under it,
+   * without changing the artboard. One undoable step; the selection is
+   * cleared afterwards.
+   *
+   * - Image layers: the selected pixels become transparent.
+   * - Vector layers (shapes, paths, text, brush strokes): deleted when the
+   *   selection covers the whole layer. A vector layer only partly inside
+   *   is left unchanged — cutting part of a vector would need boolean path
+   *   operations, which the editor doesn't have yet — and a notice says so.
+   *
+   * Resolves to what happened, or null when there was no selection.
+   */
+  async deleteInPixelSelection(): Promise<{ imagesChanged: number; vectorsDeleted: number; vectorsPartial: number } | null> {
+    const sel = this.pixelSelection;
+    if (sel.isEmpty || this.deletingInSelection) return null;
+    this.deletingInSelection = true;
+    try {
+      sel.fit(this.doc.width, this.doc.height);
+      this.exitTextEditing();
+      this.stopPathEditing();
+      const mask = sel.getMask();
+      const maskCanvas = selectionMaskCanvas(sel);
+      const { width: docW, height: docH } = this.doc;
+      const images: FabricImage[] = [];
+      const vectors: FabricObject[] = [];
+      walkLayers(this.canvas.getObjects(), (o) => {
+        if (!isEffectivelyVisible(o) || isEffectivelyLocked(o)) return;
+        if (o instanceof FabricImage) images.push(o);
+        // Paint layers: each brush stroke is its own path.
+        else if (o instanceof PaintLayer) vectors.push(...o.getObjects().filter((stroke) => stroke.visible));
+        else if (!(o instanceof Group)) vectors.push(o); // other groups: their children are visited
+      });
+
+      // Vectors: fully covered → delete; partly covered → report.
+      const toDelete: FabricObject[] = [];
+      let vectorsPartial = 0;
+      for (const o of vectors) {
+        o.setCoords();
+        const r = o.getBoundingRect();
+        const outside = r.left < -0.5 || r.top < -0.5 || r.left + r.width > docW + 0.5 || r.top + r.height > docH + 0.5;
+        const coverage = classifyCoverage(renderLayerAlone(o, sel.width, sel.height, sel.scale), mask, outside);
+        if (coverage === 'full') toDelete.push(o);
+        else if (coverage === 'partial') vectorsPartial++;
+      }
+
+      // Images: erase the selected pixels (compute all first, then swap in).
+      const edits: { img: FabricImage; pixels: HTMLCanvasElement }[] = [];
+      for (const img of images) {
+        const pixels = eraseImagePixels(img, maskCanvas, sel.scale);
+        if (pixels) edits.push({ img, pixels });
+      }
+
+      if (!edits.length && !toDelete.length) {
+        this.notify(vectorsPartial ? 'toast.selectionDeletePartialVectors' : 'toast.selectionDeleteNothing', 'warning');
+        return { imagesChanged: 0, vectorsDeleted: 0, vectorsPartial };
+      }
+
+      this.canvas.discardActiveObject();
+      for (const { img, pixels } of edits) {
+        const blob = await new Promise<Blob>((resolve, reject) =>
+          pixels.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not encode the image'))), 'image/png'),
+        );
+        const asset = await this.assets.add(blob, img.samaFileName ?? `${img.samaName ?? 'image'}.png`);
+        // setSrc resets the size to the new source; keep the layer's geometry.
+        const { width, height, cropX, cropY } = img;
+        await img.setSrc(asset.url);
+        img.set({ width, height, cropX, cropY, dirty: true });
+        img.samaAssetId = asset.id;
+        for (let p = img.parent as Group | undefined; p; p = p.parent as Group | undefined) p.set('dirty', true);
+      }
+      for (const o of toDelete) {
+        const parent = o.parent as Group | undefined;
+        this.removeFromParent(o);
+        // Groups and paint layers left empty go too.
+        for (let g = parent; g && g.getObjects().length === 0; ) {
+          const up = g.parent as Group | undefined;
+          this.removeFromParent(g);
+          g = up;
+        }
+      }
+      this.pixelSelection.clear();
+      this.publishPixelSelection();
+      this.handleSelectionChange();
+      this.canvas.requestRenderAll();
+      this.commit('Delete selection');
+      if (vectorsPartial) this.notify('toast.selectionDeletePartialVectors', 'warning');
+      return { imagesChanged: edits.length, vectorsDeleted: toDelete.length, vectorsPartial };
+    } finally {
+      this.deletingInSelection = false;
+    }
   }
 
   // =========================================================================
