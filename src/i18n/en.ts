@@ -83,7 +83,7 @@ export const en = {
   'hint.magneticLasso': 'Click, then move along an edge · Click to add an anchor · Enter to close · Shift to add, Alt to subtract',
   'hint.objectSelection': 'Click an object or drag a box around objects · Shift to add, Alt to subtract',
   'hint.quickSelection': 'Paint to select similar areas · Alt+Paint to subtract · [ and ] change the brush size',
-  'hint.magicWand': 'Click to select objects of a similar color · Shift to add, Alt to subtract',
+  'hint.magicWand': 'Click to select similar colors · Shift to add, Alt to subtract',
   'hint.groupSelection': 'Click to select an object in a group · Click again to select the parent group',
 
   // Options bar
@@ -356,6 +356,7 @@ export const en = {
   'history.Polygonal Lasso': 'Polygonal Lasso',
   'history.Magnetic Lasso': 'Magnetic Lasso',
   'history.Quick Selection': 'Quick Selection',
+  'history.Magic Wand': 'Magic Wand',
   'history.Selection': 'Selection',
   'history.Select all': 'Select all',
   'history.Deselect': 'Deselect',

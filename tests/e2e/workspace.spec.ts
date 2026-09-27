@@ -1167,28 +1167,52 @@ test.describe('object-based selection tools', () => {
     expectNoErrors(errors);
   });
 
-  test('Y magic wand: tolerance, contiguous toggle, Shift adds, Esc', async ({ page }) => {
+  test('Y magic wand: area selection of similar colour — contiguous, tolerance, Shift adds, Esc, undo', async ({ page }) => {
     const errors = await openWorkspace(page);
     await addRect(page, '#ff0000', [100, 100], [200, 200]); // 1
-    await addRect(page, '#ff1010', [200, 100], [300, 200]); // 2 touches 1, similar
+    await addRect(page, '#ff1010', [190, 100], [300, 200]); // 2 overlaps 1, similar
     await addRect(page, '#f01818', [600, 100], [700, 200]); // 3 far, similar
     await addRect(page, '#0000ff', [100, 400], [200, 500]); // 4 blue
+    await page.keyboard.press('Escape');
     await page.keyboard.press('y');
     expect((await workspaceState(page)).tool).toBe('magicWand');
     const opts = await page.evaluate(() => (window as any).samaEditor.store.getState().toolOptions.magicWand);
     expect(opts).toEqual({ tolerance: 32, contiguous: true });
+    // Click the red shape: marching ants around it and the one overlapping it — not the far one, not blue.
     await clickAt(page, 150, 150);
-    expect(await selectedNames(page)).toEqual(['Rectangle 1', 'Rectangle 2']);
+    let r = (await region(page))!;
+    expect(Math.abs(r.x - 100)).toBeLessThanOrEqual(2);
+    expect(Math.abs(r.x + r.width - 300)).toBeLessThanOrEqual(2);
+    expect(Math.abs(r.height - 100)).toBeLessThanOrEqual(2);
+    expect(await regionHas(page, 650, 150)).toBe(false);
+    expect(await regionHas(page, 150, 450)).toBe(false);
+    expect(await regionHas(page, 50, 50)).toBe(false);
+    expect((await workspaceState(page)).history.labels.at(-1)).toBe('Magic Wand');
+    // Contiguous off: every similar pixel.
     await page.getByTestId('magic-wand-contiguous').uncheck();
     await clickAt(page, 150, 150);
-    expect(await selectedNames(page)).toEqual(['Rectangle 1', 'Rectangle 2', 'Rectangle 3']);
+    expect(await regionHas(page, 650, 150)).toBe(true);
+    // Tolerance 0: the exact colour only.
     await page.evaluate(() => (window as any).samaEditor.updateToolOptions('magicWand', { tolerance: 0 }));
     await clickAt(page, 150, 150);
-    expect(await selectedNames(page)).toEqual(['Rectangle 1']);
+    expect(await regionHas(page, 150, 150)).toBe(true);
+    expect(await regionHas(page, 250, 150)).toBe(false);
+    expect(await regionHas(page, 650, 150)).toBe(false);
+    // Shift adds the blue square.
     await clickAt(page, 150, 450, ['Shift']);
-    expect(await selectedNames(page)).toEqual(['Rectangle 1', 'Rectangle 4']);
+    expect(await regionHas(page, 150, 450)).toBe(true);
+    expect(await regionHas(page, 150, 150)).toBe(true);
+    // Undo steps back one click; Esc clears.
+    await page.keyboard.press('Control+z');
+    await settle(page);
+    expect(await regionHas(page, 150, 450)).toBe(false);
     await page.keyboard.press('Escape');
-    expect(await selectedNames(page)).toEqual([]);
+    expect(await region(page)).toBeNull();
+    // Clicking the empty artboard selects the background.
+    await page.evaluate(() => (window as any).samaEditor.updateToolOptions('magicWand', { tolerance: 32, contiguous: true }));
+    await clickAt(page, 900, 900);
+    expect(await regionHas(page, 50, 50)).toBe(true);
+    expect(await regionHas(page, 150, 150)).toBe(false);
     expectNoErrors(errors);
   });
 
@@ -1588,13 +1612,21 @@ test.describe('selection polish', () => {
     const errors = await openWorkspace(page);
     await addRect(page, '#e5484d', [100, 100], [200, 200]);
     await addRect(page, '#3e63dd', [400, 100], [500, 200]);
+    await page.keyboard.press('Escape');
     await page.keyboard.press('y');
     await clickAt(page, 150, 150);
     await clickAt(page, 450, 150, ['Shift']);
-    expect((await selectedNames(page)).length).toBe(2);
+    expect(await regionHas(page, 150, 150)).toBe(true);
+    expect(await regionHas(page, 450, 150)).toBe(true);
     await clickAt(page, 150, 150, ['Alt']);
-    expect(await selectedNames(page)).toHaveLength(1);
+    expect(await regionHas(page, 150, 150)).toBe(false);
+    expect(await regionHas(page, 450, 150)).toBe(true);
+    // Shift+Alt on blue: intersect keeps the blue.
+    await clickAt(page, 450, 150, ['Shift', 'Alt']);
+    expect(await regionHas(page, 450, 150)).toBe(true);
+    await page.keyboard.press('Escape');
     await page.keyboard.press('w');
+    await clickAt(page, 450, 150);
     await clickAt(page, 150, 150, ['Shift']);
     expect(await selectedNames(page)).toHaveLength(2);
     await clickAt(page, 450, 150, ['Alt']);

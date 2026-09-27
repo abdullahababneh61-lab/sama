@@ -1,158 +1,144 @@
 /**
- * Magic Wand tool (Y): click a layer to select every layer with a similar
- * colour (Illustrator's Magic Wand, applied to Sama's layers).
+ * Magic Wand tool (Y): click to select an area of similar colour (marching
+ * ants), like Photoshop's Magic Wand.
  *
- * - Tolerance (0–255, default 32): how far each RGB channel of another
- *   layer's colour may be from the clicked layer's colour.
- * - Contiguous (on by default): only layers connected to the clicked one —
- *   touching or overlapping it, directly or through other matching layers.
- *   Off: every matching layer in the document.
+ * - Works on the visible picture — shapes, text, paint and photos alike —
+ *   so clicking a solid shape selects exactly that shape's pixels, and
+ *   clicking the empty artboard selects the background around the artwork.
+ * - Tolerance (0–255, default 32 — Photoshop's default): how far each
+ *   channel (red, green, blue, alpha) may differ from the clicked colour.
+ * - Contiguous (on by default): only pixels connected to the clicked one.
+ *   Off: every pixel of a similar colour on the artboard.
  * - Mode (options bar): New, Add, Subtract or Intersect. Keys held on the
  *   click override it: Shift = add, Alt/Option = subtract, Shift+Alt =
  *   intersect. The cursor shows the mode (+ / − / × next to the wand).
- * - Clicking empty canvas deselects in New mode (keeps the selection
- *   otherwise). Esc: deselect.
+ * - Each click is one undo step ("Magic Wand"); the selection's size
+ *   flashes next to it. A click outside the artboard deselects (New mode).
+ *   Esc clears the selection.
  *
- * A layer's colour is its solid fill; layers without a fill (lines, open
- * paths, outlined shapes) use their solid stroke colour instead. Layers
- * that have no single colour — images, groups, paint layers, gradients —
- * are never matched; clicking one just selects that layer. Only top-level
- * layers are compared (a group counts as one layer), and hidden or locked
- * layers are skipped. "Touching" is judged from the layers' (rotated)
- * bounding boxes.
+ * The result is the shared region selection used by the marquees, lassos
+ * and Quick Selection, so Feather, Invert, Cut/Copy to New Layer etc. all
+ * apply to it.
  */
-import { Color, type FabricObject } from 'fabric';
-import { Tool, type ToolPointerEvent } from './Tool';
-import { isEffectivelyLocked } from '../meta';
-import { combineLayers, resolveSelectionMode } from '../selectionModes';
+import { RegionTool } from './RegionTool';
+import type { ToolPointerEvent } from './Tool';
+import { floodFill } from '../pixelSelection';
 import { wandCursor } from '../cursors';
-import { ModeCursor } from './modeCursor';
+import type { SelectionMode } from '../types';
 
-export class MagicWandTool extends Tool {
+/**
+ * The pixels selected by a click at (x, y) (mask coordinates), as a 0/255
+ * mask: similar pixels connected to the clicked one (`contiguous`), or all
+ * similar pixels. Null when the click is outside the image.
+ */
+export function magicWandMask(
+  rgba: Uint8ClampedArray,
+  w: number,
+  h: number,
+  x: number,
+  y: number,
+  tolerance: number,
+  contiguous: boolean,
+): Uint8Array | null {
+  const sx = Math.floor(x);
+  const sy = Math.floor(y);
+  if (sx < 0 || sy < 0 || sx >= w || sy >= h) return null;
+  const out = new Uint8Array(w * h);
+  if (contiguous) {
+    floodFill(rgba, w, h, sx, sy, tolerance, out);
+  } else {
+    const s = (sy * w + sx) * 4;
+    const [r, g, b, a] = [rgba[s], rgba[s + 1], rgba[s + 2], rgba[s + 3]];
+    for (let i = 0, p = 0; i < out.length; i++, p += 4) {
+      if (
+        Math.abs(rgba[p] - r) <= tolerance &&
+        Math.abs(rgba[p + 1] - g) <= tolerance &&
+        Math.abs(rgba[p + 2] - b) <= tolerance &&
+        Math.abs(rgba[p + 3] - a) <= tolerance
+      ) {
+        out[i] = 1;
+      }
+    }
+  }
+  for (let i = 0; i < out.length; i++) if (out[i]) out[i] = 255;
+  antiAliasEdge(rgba, w, h, sx, sy, out);
+  return out;
+}
+
+/**
+ * Anti-aliasing (like Photoshop's option, always on): shapes are drawn with
+ * soft edges, so the pixels just outside the selected area are partly the
+ * clicked colour. Each gets a partial selection value — how much of it the
+ * clicked colour covers, estimated from where its colour lies between the
+ * clicked colour and the colour just beyond it. The marching ants (drawn at
+ * 50 %) then follow the shape's true edge instead of running a pixel inside.
+ */
+function antiAliasEdge(rgba: Uint8ClampedArray, w: number, h: number, sx: number, sy: number, mask: Uint8Array) {
+  const s = (sy * w + sx) * 4;
+  const seed = [rgba[s], rgba[s + 1], rgba[s + 2], rgba[s + 3]];
+  const dist = (i: number) => {
+    const p = i * 4;
+    return Math.hypot(rgba[p] - seed[0], rgba[p + 1] - seed[1], rgba[p + 2] - seed[2], rgba[p + 3] - seed[3]);
+  };
+  const edge: [number, number][] = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (mask[i]) continue;
+      let cover = 0;
+      // A selected neighbour on one side, the other colour on the opposite side.
+      const check = (inside: number, beyond: number) => {
+        if (mask[inside] !== 255 || mask[beyond]) return;
+        const far = dist(beyond);
+        if (far < 1) return;
+        cover = Math.max(cover, 1 - dist(i) / far);
+      };
+      if (x > 0 && x < w - 1) {
+        check(i - 1, i + 1);
+        check(i + 1, i - 1);
+      }
+      if (y > 0 && y < h - 1) {
+        check(i - w, i + w);
+        check(i + w, i - w);
+      }
+      if (cover > 0.02) edge.push([i, Math.round(Math.min(1, cover) * 254)]);
+    }
+  }
+  for (const [i, v] of edge) mask[i] = v;
+}
+
+export class MagicWandTool extends RegionTool {
   readonly id = 'magicWand' as const;
   cursor = wandCursor('new');
 
-  private readonly modeCursor = new ModeCursor(this.editor, (mods) => wandCursor(this.modeFor(mods)));
-  private hover: FabricObject | null = null;
-  /** Selection when the button went down (Fabric clears it before our handler runs). */
-  private before: FabricObject[] = [];
-  private offBefore: (() => void) | null = null;
-
-  activate() {
-    this.editor.canvas.controlsMode = 'outline';
-    this.offBefore = this.editor.canvas.on('mouse:down:before', () => {
-      this.before = this.editor.canvas.getActiveObjects();
-    });
-    this.modeCursor.start();
-    this.editor.canvas.requestRenderAll();
+  protected get historyLabel() {
+    return 'Magic Wand';
   }
 
-  deactivate() {
-    this.modeCursor.stop();
-    this.offBefore?.();
-    this.offBefore = null;
-    this.hover = null;
+  /** Each click completes at once: there's never a selection in progress. */
+  protected get busy() {
+    return false;
   }
 
-  onPointerMove(ev: ToolPointerEvent) {
-    const hit = this.editor.layerAt(ev.scenePoint);
-    if (hit !== this.hover) {
-      this.hover = hit;
-      this.editor.canvas.requestRenderAll();
-    }
-  }
+  protected cancel() {}
 
-  onOptionsChanged() {
-    this.modeCursor.refresh();
+  protected cursorFor(mode: SelectionMode): string {
+    return wandCursor(mode);
   }
 
   onPointerDown(ev: ToolPointerEvent) {
     const mode = this.modeFor(ev);
-    const hit = this.editor.layerAt(ev.scenePoint);
+    const sel = this.editor.pixelSelection;
+    const pixels = this.editor.renderArtboardPixels(); // also fits the mask to the artboard
     const { tolerance, contiguous } = this.editor.toolOptions.magicWand;
-    const picked = hit ? similarLayers(this.editor.canvas.getObjects(), hit, tolerance, contiguous) : [];
-    const current = this.before.filter((o) => !o.parent);
-    const next = combineLayers(current, picked, mode);
-    const order = this.editor.canvas.getObjects();
-    next.sort((a, b) => order.indexOf(a) - order.indexOf(b));
-    if (next.length) this.editor.selectObjects(next);
-    else this.editor.clearSelection();
-  }
-
-  /** The tool's mode, overridden by the keys held. */
-  private modeFor(mods: { shift: boolean; alt: boolean }) {
-    return resolveSelectionMode(this.editor.selectionModeOf(this.id), mods);
-  }
-
-  renderOverlay(ctx: CanvasRenderingContext2D) {
-    const active = this.editor.canvas.getActiveObjects();
-    if (this.hover && !active.includes(this.hover)) this.editor.strokeObjectOutline(ctx, this.hover, '#4d8dff', 1.5);
-  }
-}
-
-/** RGB of a layer's solid fill (or stroke when it has no fill); null when it has none. */
-export function layerColor(obj: FabricObject): [number, number, number] | null {
-  const solid = (paint: unknown): [number, number, number] | null => {
-    if (typeof paint !== 'string' || !paint || paint === 'transparent' || paint === 'none') return null;
-    const c = new Color(paint).getSource();
-    if (c[3] === 0) return null;
-    return [c[0], c[1], c[2]];
-  };
-  if (obj.samaKind === 'group' || obj.samaKind === 'paint' || obj.samaKind === 'image') return null;
-  if (obj.samaKind === 'line') return solid(obj.stroke);
-  return solid(obj.fill) ?? solid(obj.stroke);
-}
-
-/** Largest per-channel difference between two colours. */
-export function colorDistance(a: [number, number, number], b: [number, number, number]): number {
-  return Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
-}
-
-/**
- * Layers similar in colour to `seed` among `layers` (seed included). With
- * `contiguous`, only those reachable from the seed through touching
- * matching layers.
- */
-export function similarLayers(layers: FabricObject[], seed: FabricObject, tolerance: number, contiguous: boolean): FabricObject[] {
-  const seedColor = layerColor(seed);
-  if (!seedColor) return [seed];
-  const candidates = layers.filter((o) => {
-    if (o === seed) return true;
-    if (!o.visible || isEffectivelyLocked(o)) return false;
-    const c = layerColor(o);
-    return c !== null && colorDistance(c, seedColor) <= tolerance;
-  });
-  if (!contiguous) return candidates;
-  candidates.forEach((o) => o.setCoords());
-  const reached = new Set<FabricObject>([seed]);
-  const queue = [seed];
-  while (queue.length) {
-    const cur = queue.shift()!;
-    for (const o of candidates) {
-      if (!reached.has(o) && touches(cur, o)) {
-        reached.add(o);
-        queue.push(o);
-      }
+    const mask = magicWandMask(pixels.data, sel.width, sel.height, ev.scenePoint.x * sel.scale, ev.scenePoint.y * sel.scale, tolerance, contiguous);
+    if (!mask) {
+      this.clickWithoutShape(mode);
+      return;
     }
+    sel.combineMask(mask, mode);
+    this.editor.publishPixelSelection();
+    this.editor.commit(this.historyLabel);
+    this.flashSize();
   }
-  return candidates.filter((o) => reached.has(o));
-}
-
-/** Do two layers' (rotated) bounding boxes overlap or touch? */
-function touches(a: FabricObject, b: FabricObject): boolean {
-  if (a.intersectsWithObject(b) || a.isContainedWithinObject(b) || b.isContainedWithinObject(a)) return true;
-  // Unrotated layers that only share an edge (e.g. two tiles side by side) touch too.
-  return a.angle % 90 === 0 && b.angle % 90 === 0 && edgesMeet(a, b);
-}
-
-function edgesMeet(a: FabricObject, b: FabricObject): boolean {
-  const r = a.getBoundingRect();
-  const s = b.getBoundingRect();
-  const EPS = 0.5;
-  return (
-    r.left <= s.left + s.width + EPS &&
-    s.left <= r.left + r.width + EPS &&
-    r.top <= s.top + s.height + EPS &&
-    s.top <= r.top + r.height + EPS
-  );
 }

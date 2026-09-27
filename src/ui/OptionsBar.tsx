@@ -57,15 +57,7 @@ export function OptionsBar() {
           </>
         );
       case 'magicWand':
-        return (
-          <>
-            <SelectionModeButtons />
-            <span className="sw-options__sep" />
-            <MagicWandOptions />
-            <span className="sw-options__sep" />
-            <SelectOptions />
-          </>
-        );
+        return <RegionOptions magicWand />;
       case 'rectMarquee':
       case 'ellipseMarquee':
       case 'singleRowColumnMarquee':
@@ -423,9 +415,10 @@ function SpotHealOptions() {
 /**
  * Options of the region-selection tools: the marquee shape switch (the
  * three marquee tools and the Row/Column choice), the Quick Selection brush
- * size, and the refine / Invert / Deselect / layer-via-selection actions.
+ * size, the Magic Wand's tolerance, and the refine / Invert / Deselect /
+ * layer-via-selection actions.
  */
-function RegionOptions({ marquee = false, quickSelection = false }: { marquee?: boolean; quickSelection?: boolean }) {
+function RegionOptions({ marquee = false, quickSelection = false, magicWand = false }: { marquee?: boolean; quickSelection?: boolean; magicWand?: boolean }) {
   const editor = useEditor();
   const t = useT();
   const tool = useWorkspace((s) => s.activeTool);
@@ -459,6 +452,12 @@ function RegionOptions({ marquee = false, quickSelection = false }: { marquee?: 
       {quickSelection && (
         <span className="sw-options__cluster">
           <NumberField label={t('options.size')} value={size} min={1} max={500} suffix="px" width={96} onChange={(v) => editor?.updateToolOptions('quickSelection', { size: v })} />
+          <span className="sw-options__sep" />
+        </span>
+      )}
+      {magicWand && (
+        <span className="sw-options__cluster">
+          <MagicWandOptions />
           <span className="sw-options__sep" />
         </span>
       )}
@@ -565,13 +564,13 @@ function MagicWandOptions() {
   const t = useT();
   const o = useWorkspace((s) => s.toolOptions.magicWand);
   return (
-    <div className="sw-options__group">
+    <>
       <NumberField label={t('options.tolerance')} value={o.tolerance} min={0} max={255} width={90} onChange={(v) => editor?.updateToolOptions('magicWand', { tolerance: Math.round(v) })} />
       <label className="sw-check sw-check--inline sw-options__check">
         <input type="checkbox" checked={o.contiguous} onChange={(e) => editor?.updateToolOptions('magicWand', { contiguous: e.target.checked })} data-testid="magic-wand-contiguous" />
         {t('options.contiguous')}
       </label>
-    </div>
+    </>
   );
 }
 

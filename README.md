@@ -83,7 +83,7 @@ Invert/Deselect → Cut/Copy to New Layer.
 | Magnetic Lasso | `Alt+Shift+L` | Click once, then move along an edge: the outline clings to the strongest contrast edge within the dashed circle (10 px) and places anchors automatically (click to add one). Close on the first point, double-click or Enter; Backspace removes an anchor; Esc cancels. |
 | Object Selection | `W` | Click a layer to select it; drag a box to select the layers mostly inside it (≥ 50 % of their bounds). Shift+click on a selected layer removes it. Esc deselects. |
 | Quick Selection | `Shift+W` | Paint to select similar colours: it grows from the colour under the brush's centre and stops at colour edges, even where the brush overlaps them. The brush starts at a size that suits the artboard (≈ 1/35 of its shorter side); `[` / `]` resize. Alt+paint removes. Each stroke is one undo step. Esc deselects. |
-| Magic Wand | `Y` | Click a layer to select every layer of a similar colour. Tolerance (0–255, default 32) and Contiguous (only layers touching it, on by default) in the options bar. Esc deselects. |
+| Magic Wand | `Y` | Click to select an area of similar colour (marching ants), like Photoshop's: works on the visible picture, so clicking a solid shape selects exactly that shape (and similar-coloured shapes overlapping it), clicking the artboard selects the background. **Tolerance** (0–255, default 32, as in Photoshop) and **Contiguous** (connected pixels only, on by default) in the options bar. Edges are anti-aliased, so the selection follows the shape's true outline. One undo step per click. Esc deselects. |
 | Brush | `B` | Size, colour, opacity, **hardness** (soft edges), smoothing. Shift = straight line. `[` / `]` resize. Strokes go into the selected paint layer (or a new one). |
 | Eraser | `E` | Erases the selected layers, or everything unlocked under the cursor when nothing is selected. Non-destructive and undoable. |
 | Pen | `P` | Click = corner, drag = curve, click first point = close, Enter/Esc = finish, Backspace = remove last point. |
@@ -241,7 +241,7 @@ Flagged deliberately rather than left silent:
   colours plus matching grain — good for spots, dust and small objects on
   even backgrounds; it doesn't rebuild detailed patterns the way Photoshop's
   content-aware fill does.
-- **Region selections** (marquee, lasso, Quick Selection) are pixel masks with
+- **Region selections** (marquee, lasso, Quick Selection, Magic Wand) are pixel masks with
   soft edges: Feather, Smooth, Expand and Contract refine them; Invert and
   **Cut / Copy to New Layer** use them. Cut/Copy to New
   Layer works on **image layers** only — shapes, text and brush strokes are
@@ -249,7 +249,7 @@ Flagged deliberately rather than left silent:
   erasing and Delete don't yet act inside a selection (Delete shows a
   notice). Region selections cover the main artboard only and aren't saved
   in the document. They are part of undo/redo; *layer* selections (V, Object
-  Selection, Magic Wand, Group Selection) are not — as in Photoshop and Figma.
+  Selection, Group Selection) are not — as in Photoshop and Figma.
 - **Ctrl+Shift+J in Chrome, Edge and Brave (Windows/Linux)** opens the
   browser's developer console, which a web page can't prevent — use the
   "Cut to New Layer" button there. (On macOS the shortcut is ⌘⇧J and works.)
@@ -257,11 +257,13 @@ Flagged deliberately rather than left silent:
   listed in the JSON export). Rulers, snapping, "fit to screen" and the crop
   tools refer to the main artboard; cropping removes the other artboards along
   with everything outside the crop.
-- **Magic Wand and Object Selection work on layers**, not pixels: the wand
-  compares each layer's solid fill (or stroke) colour; images, groups, paint
-  layers and gradients have no single colour and are never matched.
-  "Touching" is judged from bounding boxes. Object Selection doesn't detect
+- **Object Selection works on layers**, not pixels: it doesn't detect
   subjects inside a photo (Photoshop's AI feature).
+- **Magic Wand and touching shapes:** two same-coloured shapes whose edges
+  meet exactly (without overlapping) leave a hairline anti-aliasing seam of
+  lighter pixels between them, which stops a Contiguous selection at the
+  default tolerance — as in Photoshop. Overlapping shapes are joined; a
+  higher tolerance or Contiguous off also takes both.
 - **Very large artboards:** Quick Selection and the Magnetic Lasso analyse the
   rendered picture, which takes a moment on huge artboards (≈1 s per stroke at
   4000 × 3000). Above 4096 × 4096 px, region selections are stored at a

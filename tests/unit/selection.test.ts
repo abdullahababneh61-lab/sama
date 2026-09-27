@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { Rect } from 'fabric';
 import {
   floodFill,
   MAX_MASK_PIXELS,
@@ -19,7 +18,7 @@ import {
   rectFromPoints,
 } from '../../src/editor/artboards';
 import { boxCoverage } from '../../src/editor/tools/ObjectSelectionTool';
-import { colorDistance, layerColor, similarLayers } from '../../src/editor/tools/MagicWandTool';
+import { magicWandMask } from '../../src/editor/tools/MagicWandTool';
 import { resized } from '../../src/editor/tools/ArtboardTool';
 import { polygonArea } from '../../src/editor/tools/LassoTool';
 
@@ -226,28 +225,44 @@ describe('object selection helpers', () => {
 });
 
 describe('magic wand', () => {
-  const rect = (fill: string | null, left: number, top: number, stroke: string | null = null) => {
-    const r = new Rect({ left, top, width: 10, height: 10, fill, stroke, originX: 'left', originY: 'top', strokeWidth: 0 });
-    r.samaKind = 'rect';
-    r.setCoords();
-    return r;
+  /** A 12 × 4 image: red | near-red | red gap … | blue, with a separate red block at the far right. */
+  const image = () => {
+    const w = 12;
+    const h = 4;
+    const cols = ['#ff0000', '#ff0000', '#f81010', '#f81010', '#0000ff', '#0000ff', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ff0000', '#ff0000'];
+    const rgba = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const c = cols[x];
+        rgba.set([parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16), 255], (y * w + x) * 4);
+      }
+    return { rgba, w, h };
   };
-  it('reads a layer colour from its fill, falling back to the stroke', () => {
-    expect(layerColor(rect('#ff0000', 0, 0))).toEqual([255, 0, 0]);
-    expect(layerColor(rect(null, 0, 0, '#00ff00'))).toEqual([0, 255, 0]);
-    expect(layerColor(rect('transparent', 0, 0))).toBeNull();
-    expect(colorDistance([10, 20, 30], [15, 5, 30])).toBe(15);
+  const columns = (m: Uint8Array, w: number) => [...new Set([...m.keys()].filter((i) => m[i]).map((i) => i % w))].sort((p, q) => p - q);
+  it('contiguous: the similar pixels connected to the click', () => {
+    const { rgba, w, h } = image();
+    const m = magicWandMask(rgba, w, h, 0.5, 1.5, 32, true)!;
+    expect(columns(m, w)).toEqual([0, 1, 2, 3]); // stops at the blue, not the far red block
+    expect(m[0]).toBe(255);
   });
-  it('selects similar colours, contiguous or not', () => {
-    const a = rect('#ff0000', 0, 0);
-    const b = rect('#f81010', 10, 0); // touches a (shared edge), close colour
-    const c = rect('#ff0000', 100, 0); // far away, same colour
-    const d = rect('#0000ff', 20, 0); // touches b, different colour
-    const layers = [a, b, c, d];
-    expect(similarLayers(layers, a, 32, true)).toEqual([a, b]);
-    expect(similarLayers(layers, a, 32, false)).toEqual([a, b, c]);
-    expect(similarLayers(layers, a, 0, false)).toEqual([a, c]);
-    expect(similarLayers(layers, d, 32, true)).toEqual([d]);
+  it('non-contiguous: every similar pixel', () => {
+    const { rgba, w, h } = image();
+    expect(columns(magicWandMask(rgba, w, h, 0, 0, 32, false)!, w)).toEqual([0, 1, 2, 3, 10, 11]);
+    expect(columns(magicWandMask(rgba, w, h, 0, 0, 0, false)!, w)).toEqual([0, 1, 10, 11]); // tolerance 0: exact colour only
+  });
+  it('anti-aliasing: a half-covered edge pixel is half selected', () => {
+    const w = 5;
+    const rgba = new Uint8ClampedArray(w * 4);
+    const cols = [[255, 0, 0], [255, 0, 0], [255, 128, 128], [255, 255, 255], [255, 255, 255]];
+    cols.forEach((c, x) => rgba.set([...c, 255], x * 4));
+    const m = magicWandMask(rgba, w, 1, 0, 0, 32, true)!;
+    expect([m[0], m[1], m[3], m[4]]).toEqual([255, 255, 0, 0]);
+    expect(Math.abs(m[2] - 127)).toBeLessThanOrEqual(2);
+  });
+  it('outside the image: nothing', () => {
+    const { rgba, w, h } = image();
+    expect(magicWandMask(rgba, w, h, -1, 0, 32, true)).toBeNull();
+    expect(magicWandMask(rgba, w, h, 12, 0, 32, true)).toBeNull();
   });
 });
 
