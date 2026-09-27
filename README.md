@@ -70,7 +70,7 @@ Invert/Deselect → Cut/Copy to New Layer.
 
 | Tool | Key | Notes |
 | ---- | --- | ----- |
-| Selection (Move / Select) | `V` | Click to select (8 resize handles + rotation), drag to move. Corner handles resize proportionally (hold Shift for free resizing); edge handles resize one dimension. Drag on empty space to marquee-select every object it touches; Shift+click adds/removes. Rotation snaps to 15° with Shift. `Ctrl`/`⌘`+click selects inside groups; double-click a group to go inside it. Alt+drag duplicates. Esc deselects, Delete removes. |
+| Selection (Move / Select) | `V` | Click to select (8 resize handles + rotation), drag to move. Corner handles resize proportionally (hold Shift for free resizing); edge handles resize one dimension. Drag on empty space to marquee-select every object it touches; Shift+click adds/removes. Rotation snaps to 15° with Shift. `Ctrl`/`⌘`+click selects inside groups; double-click a group to go inside it. Alt+drag duplicates. Esc deselects, Delete removes. (It also serves as Photoshop's Path Selection tool: whole paths are selected and moved as one.) |
 | Direct Selection | `A` | Edit anchor points and Bézier handles of paths, lines and polygons. Handles move with their anchor; smooth points keep handles aligned (Alt breaks them). Double-click an anchor to switch corner ↔ smooth. |
 | Group Selection | `Shift+V` | First click selects the innermost layer inside a group; each further click on it selects the group one level up. Drag moves the selected item without ungrouping. Esc deselects. |
 | Artboard | `Shift+O` | Artboards show with a border and their name. Drag on the empty pasteboard to add "Artboard N"; drag a border or handle to resize; drag inside to move an artboard together with its artwork; double-click the name to rename; Delete removes the artboard and its artwork (asks first). The first artboard is the main one — its name is the document name and it's what PNG export renders. |
@@ -87,8 +87,11 @@ Invert/Deselect → Cut/Copy to New Layer.
 | Brush | `B` | Size, colour, opacity, **hardness** (soft edges), smoothing. Shift = straight line. `[` / `]` resize. Strokes go into the selected paint layer (or a new one). |
 | Eraser | `E` | Erases the selected layers, or everything unlocked under the cursor when nothing is selected. Non-destructive and undoable. |
 | Pen | `P` | Click = corner, drag = curve, click first point = close, Enter/Esc = finish, Backspace = remove last point. |
+| Curvature Pen | `Shift+~` | Photoshop's Curvature Pen and Illustrator's Curvature tool in one. Click points and a smooth curve is drawn through them (no handles to drag); a dashed preview shows the curve with a point at the pointer. Drag any point to move it (the curve follows live); double-click a point to switch smooth ↔ corner (double-click empty canvas = add a corner; Alt+click too). Click the first point to close, Enter to finish an open path, Esc to cancel, Backspace (or Ctrl+Z) removes the last point. Uses the Pen's fill/stroke; the result is a normal path, editable with Direct Selection. |
 | Text | `T` | Click = single line, drag = paragraph box. Font, weight, size, colour, alignment, italic, line height, letter spacing, LTR/RTL. |
-| Rectangle / Ellipse / Line / Polygon | `M` / `L` / `\` / `U` cycles | Shift = square/circle/45°, Alt = from centre. Click without dragging = 100 × 100 px. Corner radius, polygon sides. |
+| Rectangle / Ellipse / Line / Polygon | `M` / `L` / `\` / `U` cycles | Shift = square/circle/45°, Alt = from centre. Click without dragging = 100 × 100 px. Corner radius, polygon sides. The Line tool is also the "Line Segment" tool. |
+| Arc / Spiral | `Shift+\` | Two modes in the options bar. **Arc:** drag from one end to the other — a quarter ellipse that bulges towards the corner you drag to; Shift = quarter circle. **Spiral:** press at the centre and drag out — the distance is the radius, moving around the centre rotates it (Shift = 45° steps); **Turns** (default 4) also rewinds a selected spiral. Own stroke colour/width. Esc cancels a drag. |
+| Grid | `Alt+Shift+\` | Two modes. **Rectangular:** drag a rectangle (Shift = square, Alt = from centre) filled with evenly spaced **Rows × Columns** (default 4 × 4) inside a frame. **Polar:** press at the centre and drag out — a circle with **Rings** (default 4, outer edge included) and **Dividers** (default 8). The grid is one group: select, move, resize and rotate it as a unit with V (lines keep their width). The counts also rebuild a selected grid after drawing, keeping its size and position. |
 | Crop | `C` | Drag a crop area (Shift = square, Alt = from centre), adjust it with the handles or drag inside to move it; the part to be removed is shaded. Enter crops (layers outside are deleted, layers crossing the edge are trimmed, the artboard takes the new size); Esc cancels. |
 | Perspective Crop | `Shift+C` | Drag a starting rectangle, then drag each of the four corners on its own onto the edges of something seen at an angle (a photographed poster, a screen). Enter straightens that shape into a rectangle and crops to it; Esc cancels. Affected layers become image layers (see limitations). |
 | Eyedropper | `I` | A swatch next to the pointer previews the colour under it. Click sets the fill colour of the shape tools, pen, text and brush; Alt+click sets the stroke colour of the shape tools and pen. Returns to the previous tool after a pick; Esc cancels. |
@@ -135,6 +138,8 @@ with an Arabic keyboard layout.)
 | ---- | -------- | ------ |
 | Tools | `V` `A` `B` `E` `P` `T` `M` `L` `\` `C` `H` `Z` | Selection, Direct selection, Brush, Eraser, Pen, Text, Rectangle, Ellipse, Line, Crop, Hand, Zoom |
 | | `Shift+V` | Group Selection |
+| | `Shift+~` | Curvature Pen |
+| | `Shift+\` / `Alt+Shift+\` | Arc / Spiral, Grid |
 | | `Shift+O` | Artboard |
 | | `Shift+M` | Rectangular Marquee (press again: Elliptical Marquee) |
 | | `Q` | Lasso |

@@ -26,6 +26,8 @@ import {
   Ruler,
   Pipette,
   Slash,
+  Spline,
+  Grid3x3,
   Square,
   Syringe,
   Target,
@@ -34,6 +36,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { ToolId } from '../editor/types';
+import { ArcSpiral } from './icons';
 
 export interface ToolDef {
   id: ToolId;
@@ -106,6 +109,7 @@ export const TOOL_GROUPS: ToolSlot[][] = [
     single({ id: 'spotHealingBrush', icon: Bandage, shortcut: 'J' }),
     single({ id: 'healingBrush', icon: Syringe, shortcut: 'Shift+J' }),
     single({ id: 'pen', icon: PenTool, shortcut: 'P' }),
+    single({ id: 'curvaturePen', icon: Spline, shortcut: 'Shift+~' }),
     single({ id: 'text', icon: Type, shortcut: 'T' }),
   ],
   [
@@ -113,6 +117,8 @@ export const TOOL_GROUPS: ToolSlot[][] = [
     single({ id: 'ellipse', icon: Circle, shortcut: 'L' }),
     single({ id: 'line', icon: Slash, shortcut: '\\' }),
     single({ id: 'polygon', icon: Hexagon, shortcut: 'U' }),
+    single({ id: 'arcSpiral', icon: ArcSpiral, shortcut: 'Shift+\\' }),
+    single({ id: 'grid', icon: Grid3x3, shortcut: 'Alt+Shift+\\' }),
   ],
   [
     single({ id: 'hand', icon: Hand, shortcut: 'H' }),

@@ -1652,3 +1652,210 @@ test.describe('selection polish', () => {
     expectNoErrors(errors);
   });
 });
+
+test.describe('pen and path tools', () => {
+  const active = (page: import('@playwright/test').Page) =>
+    page.evaluate(() => {
+      const o = (window as any).samaEditor.canvas.getActiveObject();
+      return o ? { name: o.samaName, kind: o.samaKind, id: o.samaId, params: o.samaParams, cmds: o.path?.map((c: any) => c[0]).join(''), children: o.getObjects?.().length } : null;
+    });
+  const box = async (page: import('@playwright/test').Page) => {
+    const s = (await workspaceState(page)).selection;
+    return { x: s.x as number, y: s.y as number, width: s.width as number, height: s.height as number };
+  };
+
+  test('shortcuts: Shift+~ Curvature Pen, Shift+\\ Arc/Spiral, Alt+Shift+\\ Grid; existing keys unchanged; toolbar buttons', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    const tool = async () => (await workspaceState(page)).tool;
+    await page.keyboard.press('Shift+Backquote');
+    expect(await tool()).toBe('curvaturePen');
+    await page.keyboard.press('Shift+Backslash');
+    expect(await tool()).toBe('arcSpiral');
+    await page.keyboard.press('Alt+Shift+Backslash');
+    expect(await tool()).toBe('grid');
+    await page.keyboard.press('Backslash');
+    expect(await tool()).toBe('line');
+    await page.keyboard.press('p');
+    expect(await tool()).toBe('pen');
+    await page.keyboard.press('a');
+    expect(await tool()).toBe('direct');
+    for (const id of ['curvaturePen', 'arcSpiral', 'grid']) {
+      await page.locator(`.sw-toolbar [data-tool=${id}]`).click();
+      expect(await tool()).toBe(id);
+    }
+    expectNoErrors(errors);
+  });
+
+  test('curvature pen: smooth curve through clicked points, drag a point, corner, Backspace, Enter, Esc, close', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.keyboard.press('Shift+Backquote');
+    // Esc cancels.
+    await clickAt(page, 100, 100);
+    await clickAt(page, 200, 150);
+    await page.keyboard.press('Escape');
+    expect((await workspaceState(page)).layers).toHaveLength(0);
+    // Three points: a smooth arch through the middle one (horizontal tangent at the top).
+    await clickAt(page, 200, 500);
+    await clickAt(page, 400, 300);
+    await clickAt(page, 600, 500);
+    await clickAt(page, 800, 800);
+    await page.keyboard.press('Backspace'); // removes the 4th point
+    await page.keyboard.press('Enter');
+    let s = await workspaceState(page);
+    expect(s.layers).toHaveLength(1);
+    expect(s.history.labels.at(-1)).toBe('Curvature path');
+    expect((await active(page))!.cmds).toBe('MCC');
+    let b = await box(page);
+    // (bounds include half the 2 px stroke, and clicks land on whole screen pixels)
+    expect(Math.abs(b.y - 300)).toBeLessThanOrEqual(3); // passes through the middle point, not beyond it
+    expect(Math.abs(b.x - 200)).toBeLessThanOrEqual(3);
+    expect(Math.abs(b.x + b.width - 600)).toBeLessThanOrEqual(3);
+    // Dragging a placed point reshapes the curve live.
+    await page.keyboard.press('v');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Shift+Backquote');
+    await clickAt(page, 200, 800);
+    await clickAt(page, 400, 700);
+    await clickAt(page, 600, 800);
+    await drag(page, [400, 700], [400, 600]);
+    // Double-click the middle point: a corner (both handles collapse onto it).
+    const mid = await toPage(page, 400, 600);
+    await page.mouse.dblclick(mid.x, mid.y);
+    await page.keyboard.press('Enter');
+    const seg = await page.evaluate(() => (window as any).samaEditor.canvas.getActiveObject().path);
+    // First segment ends at the moved point with its incoming handle on it.
+    expect([seg[1][3], seg[1][4]]).toEqual([seg[1][5], seg[1][6]]);
+    expect(Math.abs(seg[1][5] - 400)).toBeLessThanOrEqual(1.5);
+    expect(Math.abs(seg[1][6] - 600)).toBeLessThanOrEqual(1.5);
+    // …and so does the outgoing one.
+    expect([seg[2][1], seg[2][2]]).toEqual([seg[1][5], seg[1][6]]);
+    // Closing: click the first point.
+    await clickAt(page, 700, 100);
+    await clickAt(page, 900, 150);
+    await clickAt(page, 850, 350);
+    await clickAt(page, 700, 100);
+    expect((await active(page))!.cmds).toBe('MCCCZ');
+    s = await workspaceState(page);
+    expect(s.layers).toHaveLength(3);
+    // Undo removes a whole path.
+    await page.keyboard.press('Control+z');
+    await settle(page);
+    expect((await workspaceState(page)).layers).toHaveLength(2);
+    expectNoErrors(errors);
+  });
+
+  test('arc: quarter ellipse filling the drag box, Shift = quarter circle; Esc cancels', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.keyboard.press('Shift+Backslash');
+    await drag(page, [200, 200], [500, 350]);
+    expect((await active(page))!.name).toBe('Arc');
+    let b = await box(page);
+    expect(Math.abs(b.width - 300)).toBeLessThanOrEqual(3);
+    expect(Math.abs(b.height - 150)).toBeLessThanOrEqual(3);
+    expect((await workspaceState(page)).history.labels.at(-1)).toBe('Arc');
+    // Shift: symmetric.
+    const a = await toPage(page, 200, 500);
+    const c = await toPage(page, 500, 600);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.keyboard.down('Shift');
+    await page.mouse.move(c.x, c.y, { steps: 5 });
+    await page.mouse.up();
+    await page.keyboard.up('Shift');
+    b = await box(page);
+    expect(Math.abs(b.width - b.height)).toBeLessThanOrEqual(2);
+    // Esc mid-drag: nothing created.
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(c.x, c.y, { steps: 3 });
+    await page.keyboard.press('Escape');
+    await page.mouse.up();
+    expect((await workspaceState(page)).layers).toHaveLength(2);
+    expectNoErrors(errors);
+  });
+
+  test('spiral: centred on the press, radius = drag distance; Turns rewinds a drawn spiral (own undo step)', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.keyboard.press('Shift+Backslash');
+    await page.getByTestId('arc-spiral-mode').locator('[data-mode=spiral]').click();
+    await drag(page, [500, 500], [650, 500]);
+    let o = (await active(page))!;
+    expect(o.name).toBe('Spiral');
+    expect(Math.abs(o.params.radius - 150)).toBeLessThanOrEqual(2);
+    expect(o.params.turns).toBe(4);
+    const b1 = await box(page);
+    expect(b1.x + b1.width).toBeLessThanOrEqual(652); // ends at the pointer…
+    expect(Math.abs(b1.x + b1.width - 650)).toBeLessThanOrEqual(3);
+    await page.evaluate(() => (window as any).samaEditor.updateToolOptions('arcSpiral', { turns: 2 }));
+    o = (await active(page))!;
+    expect(o.params.turns).toBe(2);
+    await page.keyboard.press('v'); // switching tools records the change right away
+    const s = await workspaceState(page);
+    expect(s.history.labels.slice(-2)).toEqual(['Spiral', 'Spiral turns']);
+    const b2 = await box(page);
+    expect(Math.abs(b2.x + b2.width - 650)).toBeLessThanOrEqual(3); // …and still does
+    await page.keyboard.press('Control+z');
+    await settle(page);
+    await page.evaluate(() => {
+      const ed = (window as any).samaEditor;
+      ed.selectObjects([ed.canvas.getObjects()[0]]);
+    });
+    expect((await active(page))!.params.turns).toBe(4);
+    expectNoErrors(errors);
+  });
+
+  test('grid: rows × columns in the drag box, one group; rebuild after drawing keeps size; polar rings/dividers', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.keyboard.press('Alt+Shift+Backslash');
+    await drag(page, [100, 100], [500, 400]);
+    let o = (await active(page))!;
+    expect(o.name).toBe('Grid');
+    expect(o.children).toBe(1 + 3 + 3); // frame + 3 inner lines each way
+    const b1 = await box(page);
+    expect(Math.abs(b1.width - 400)).toBeLessThanOrEqual(3);
+    expect(Math.abs(b1.height - 300)).toBeLessThanOrEqual(3);
+    // Resize it with the Selection tool, then change the rows: size is kept.
+    await page.evaluate(() => {
+      const ed = (window as any).samaEditor;
+      const g = ed.canvas.getActiveObject();
+      g.set({ scaleX: 1.5 });
+      g.setCoords();
+      ed.commit('Scale');
+    });
+    const id = o.id;
+    await page.getByRole('textbox', { name: 'Rows' }).fill('6');
+    await page.getByRole('textbox', { name: 'Rows' }).press('Enter');
+    o = (await active(page))!;
+    expect(o.children).toBe(1 + 5 + 3);
+    expect(o.id).toBe(id);
+    expect(o.params.rows).toBe(6);
+    const b2 = await box(page);
+    expect(Math.abs(b2.width - 600)).toBeLessThanOrEqual(4);
+    expect(Math.abs(b2.x - b1.x - (b1.width - b2.width) / 2)).toBeLessThanOrEqual(4);
+    await page.keyboard.press('v');
+    expect((await workspaceState(page)).history.labels.at(-1)).toBe('Grid settings');
+    await page.keyboard.press('Control+z');
+    await settle(page);
+    expect((await workspaceState(page)).layers[0].children).toHaveLength(7);
+    // Polar grid: centre + radius.
+    await page.keyboard.press('Alt+Shift+Backslash');
+    await page.getByTestId('grid-mode').locator('[data-mode=polar]').click();
+    await drag(page, [700, 700], [800, 700]);
+    o = (await active(page))!;
+    expect(o.name).toBe('Polar grid');
+    expect(o.children).toBe(4 + 8);
+    const b3 = await box(page);
+    expect(Math.abs(b3.width - 200)).toBeLessThanOrEqual(3);
+    expect(Math.abs(b3.x - 600)).toBeLessThanOrEqual(3);
+    // Survives a JSON round trip with its settings.
+    const params = await page.evaluate(async () => {
+      const ed = (window as any).samaEditor;
+      const doc = await ed.getDocument();
+      await ed.loadDocument(doc);
+      return ed.canvas.getObjects().map((x: any) => x.samaParams?.type);
+    });
+    expect(params).toContain('polarGrid');
+    expect(params).toContain('rectGrid');
+    expectNoErrors(errors);
+  });
+});

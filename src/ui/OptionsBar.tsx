@@ -20,6 +20,7 @@ import {
   SquaresUnite,
   FlipVertical2,
   Group,
+  Grid3x3,
   Ungroup,
 } from 'lucide-react';
 import { useEditor, useWorkspace } from '../workspace/context';
@@ -29,6 +30,7 @@ import type { SelectionMode, ToolId } from '../editor/types';
 import { defaultSelectionMode } from '../editor/selectionModes';
 import { toolKey } from './toolDefs';
 import { useT } from '../i18n';
+import { Arc, PolarGrid, SpiralMode } from './icons';
 import { NumberField } from './controls/NumberField';
 import { Slider } from './controls/Slider';
 import { ColorField } from './controls/ColorField';
@@ -79,7 +81,12 @@ export function OptionsBar() {
       case 'eraser':
         return <EraserOptions />;
       case 'pen':
+      case 'curvaturePen':
         return <PenOptions />;
+      case 'arcSpiral':
+        return <ArcSpiralOptions />;
+      case 'grid':
+        return <GridOptions />;
       case 'text':
         return <TextOptions />;
       case 'rect':
@@ -191,6 +198,85 @@ function PenOptions() {
   return (
     <div className="sw-options__group">
       <PaintOptions {...o} onChange={(p) => editor?.updateToolOptions('pen', p)} />
+    </div>
+  );
+}
+
+/** Stroke colour and width for the line-art tools (always a visible stroke). */
+function StrokeOptions({ stroke, strokeWidth, onChange }: { stroke: string; strokeWidth: number; onChange: (p: { stroke?: string; strokeWidth?: number }) => void }) {
+  const t = useT();
+  return (
+    <span className="sw-options__cluster">
+      <span className="sw-options__caption">{t('props.stroke')}</span>
+      <ColorField value={stroke} onChange={(c) => c && onChange({ stroke: c })} />
+      <NumberField label={t('props.strokeWidthShort')} value={strokeWidth} min={0.5} max={200} step={0.5} precision={1} suffix="px" width={84} onChange={(v) => onChange({ strokeWidth: v })} />
+    </span>
+  );
+}
+
+/** Arc / Spiral: the mode switch, spiral turns and the stroke. */
+function ArcSpiralOptions() {
+  const editor = useEditor();
+  const t = useT();
+  const o = useWorkspace((s) => s.toolOptions.arcSpiral);
+  const set = (p: Partial<typeof o>) => editor?.updateToolOptions('arcSpiral', p);
+  return (
+    <div className="sw-options__group">
+      <span className="sw-options__cluster" role="group" aria-label={t('options.shapeMode')} data-testid="arc-spiral-mode">
+        <IconButton label={t('options.arc')} size="sm" active={o.mode === 'arc'} onClick={() => set({ mode: 'arc' })} data-mode="arc">
+          <Arc size={16} />
+        </IconButton>
+        <IconButton label={t('options.spiral')} size="sm" active={o.mode === 'spiral'} onClick={() => set({ mode: 'spiral' })} data-mode="spiral">
+          <SpiralMode size={16} />
+        </IconButton>
+        <span className="sw-options__sep" />
+      </span>
+      {o.mode === 'spiral' && (
+        <span className="sw-options__cluster">
+          <NumberField label={t('options.turns')} title={t('options.turnsTitle')} value={o.turns} min={0.5} max={50} step={0.5} precision={1} width={90} onChange={(v) => set({ turns: v })} />
+          <span className="sw-options__sep" />
+        </span>
+      )}
+      <StrokeOptions stroke={o.stroke} strokeWidth={o.strokeWidth} onChange={set} />
+    </div>
+  );
+}
+
+/** Grid: the mode switch, rows/columns (or rings/dividers) and the stroke. */
+function GridOptions() {
+  const editor = useEditor();
+  const t = useT();
+  const o = useWorkspace((s) => s.toolOptions.grid);
+  const set = (p: Partial<typeof o>) => editor?.updateToolOptions('grid', p);
+  const count = (label: string, value: number, min: number, onChange: (v: number) => void) => (
+    <NumberField label={label} value={value} min={min} max={100} step={1} width={96} onChange={(v) => onChange(Math.round(v))} />
+  );
+  return (
+    <div className="sw-options__group">
+      <span className="sw-options__cluster" role="group" aria-label={t('options.shapeMode')} data-testid="grid-mode">
+        <IconButton label={t('options.rectGrid')} size="sm" active={o.mode === 'rect'} onClick={() => set({ mode: 'rect' })} data-mode="rect">
+          <Grid3x3 size={16} />
+        </IconButton>
+        <IconButton label={t('options.polarGrid')} size="sm" active={o.mode === 'polar'} onClick={() => set({ mode: 'polar' })} data-mode="polar">
+          <PolarGrid size={16} />
+        </IconButton>
+        <span className="sw-options__sep" />
+      </span>
+      <span className="sw-options__cluster">
+        {o.mode === 'rect' ? (
+          <>
+            {count(t('options.rows'), o.rows, 1, (rows) => set({ rows }))}
+            {count(t('options.columns'), o.columns, 1, (columns) => set({ columns }))}
+          </>
+        ) : (
+          <>
+            {count(t('options.rings'), o.rings, 1, (rings) => set({ rings }))}
+            {count(t('options.dividers'), o.dividers, 0, (dividers) => set({ dividers }))}
+          </>
+        )}
+        <span className="sw-options__sep" />
+      </span>
+      <StrokeOptions stroke={o.stroke} strokeWidth={o.strokeWidth} onChange={set} />
     </div>
   );
 }

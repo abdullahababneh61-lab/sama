@@ -71,6 +71,8 @@ export const DEFAULT_TOOL_OPTIONS: ToolOptions = {
   magicWand: { tolerance: 32, contiguous: true },
   selectionRefine: { feather: 2, amount: 4 },
   selectionModes: {},
+  arcSpiral: { mode: 'arc', turns: 4, stroke: '#1f1f24', strokeWidth: 2 },
+  grid: { mode: 'rect', rows: 4, columns: 4, rings: 4, dividers: 8, stroke: '#1f1f24', strokeWidth: 1 },
   shape: { fill: '#d9d9d9', stroke: null, strokeWidth: 2, cornerRadius: 0, sides: 6 },
   pen: { fill: null, stroke: '#1f1f24', strokeWidth: 2 },
   text: {

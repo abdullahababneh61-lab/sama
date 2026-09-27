@@ -110,6 +110,9 @@ import { ObjectSelectionTool } from './tools/ObjectSelectionTool';
 import { QuickSelectionTool } from './tools/QuickSelectionTool';
 import { MagicWandTool } from './tools/MagicWandTool';
 import { GroupSelectionTool } from './tools/GroupSelectionTool';
+import { CurvaturePenTool } from './tools/CurvaturePenTool';
+import { ArcSpiralTool } from './tools/ArcSpiralTool';
+import { GridTool } from './tools/GridTool';
 import { PixelSelection, type CombineMode, type SelectionShape } from './pixelSelection';
 import { SelectionAnts } from './SelectionAnts';
 import { defaultSelectionMode } from './selectionModes';
@@ -277,6 +280,9 @@ export class Editor {
       quickSelection: new QuickSelectionTool(this),
       magicWand: new MagicWandTool(this),
       groupSelection: new GroupSelectionTool(this),
+      curvaturePen: new CurvaturePenTool(this),
+      arcSpiral: new ArcSpiralTool(this),
+      grid: new GridTool(this),
     };
 
     this.bindCanvasEvents();
@@ -361,6 +367,8 @@ export class Editor {
 
   setTool(id: ToolId) {
     if (id === this.activeToolId && !this.springToolId) return;
+    // A pending debounced change (nudge, grid settings…) stays its own undo step.
+    this.flushDebouncedCommit();
     this.tool.deactivate();
     this.springToolId = null;
     this.previousToolId = this.activeToolId;
@@ -1593,18 +1601,21 @@ export class Editor {
   }
 
   private commitTimer = 0;
+  private pendingCommitLabel = '';
   /** Commits after a short pause (used for repeated key presses). */
   commitDebounced(label: string, delay = 400) {
     this.scheduleSelectionSync();
     window.clearTimeout(this.commitTimer);
+    this.pendingCommitLabel = label;
     this.commitTimer = window.setTimeout(() => this.commit(label), delay);
   }
 
-  private flushDebouncedCommit() {
+  /** Records a pending debounced change now, as its own undo step. */
+  flushDebouncedCommit() {
     if (this.commitTimer) {
       window.clearTimeout(this.commitTimer);
       this.commitTimer = 0;
-      this.commit('Nudge');
+      this.commit(this.pendingCommitLabel || 'Nudge');
     }
   }
 
@@ -1891,6 +1902,31 @@ export class Editor {
     active.setCoords();
     this.canvas.requestRenderAll();
     this.commit(axis === 'x' ? 'Flip horizontal' : 'Flip vertical');
+  }
+
+  /**
+   * Puts `next` where `old` is: same parent group, stacking position, centre,
+   * id, name and lock state. Used to rebuild generated shapes (grids) with
+   * new settings. Doesn't commit.
+   */
+  replaceLayer(old: FabricObject, next: FabricObject) {
+    next.samaId = old.samaId;
+    next.samaName = old.samaName;
+    next.samaLocked = old.samaLocked;
+    next.setPositionByOrigin(old.getRelativeCenterPoint(), 'center', 'center');
+    const parent = (old.parent as Group | undefined) ?? null;
+    const index = this.siblingsOf(old).indexOf(old);
+    // As in convertSelectionToPath: groups take new members in scene coordinates.
+    if (parent) {
+      parent.remove(old);
+      const m = parent.calcTransformMatrix();
+      util.applyTransformToObject(next, util.multiplyTransformMatrices(m, next.calcOwnMatrix()));
+    } else this.canvas.remove(old);
+    this.insertInto(parent, index, next);
+    ensureMeta(next, this.nameFor);
+    applyLockState(next);
+    next.setCoords();
+    this.canvas.requestRenderAll();
   }
 
   /** Converts rectangles, ellipses and polygons into editable paths. */
@@ -2284,6 +2320,7 @@ export class Editor {
     this.flushDebouncedCommit();
     // Let tools with in-progress work (e.g. the pen tool) undo their last step first.
     if (this.tool.id === 'pen' && this.getTool<PenTool>('pen').undoLastAnchor()) return;
+    if (this.tool.id === 'curvaturePen' && this.getTool<CurvaturePenTool>('curvaturePen').undoLastPoint()) return;
     if (this.state.isEditingText) return;
     const snap = this.history.undo();
     if (snap) this.enqueueRestore(snap);
@@ -2642,6 +2679,17 @@ export class Editor {
       l: 'polygonalLasso', // L = Ellipse; the Lasso is Q (Illustrator)
       w: 'quickSelection', // W = Object Selection
     };
+    // Shift+~ (the key left of 1): Curvature Pen, as in Illustrator.
+    if (lower === '`' && e.shiftKey && !e.altKey) {
+      this.setTool('curvaturePen');
+      return true;
+    }
+    // Shift+\ and Alt+Shift+\: Arc/Spiral and Grid — Illustrator keeps them
+    // in the flyout of the Line Segment tool (\).
+    if (lower === '\\' && e.shiftKey) {
+      this.setTool(e.altKey ? 'grid' : 'arcSpiral');
+      return true;
+    }
     // Alt+Shift+L: Magnetic Lasso.
     if (lower === 'l' && e.shiftKey && e.altKey) {
       this.setTool('magneticLasso');
@@ -2768,6 +2816,7 @@ const CODE_KEYS: Record<string, string> = {
   Semicolon: ';',
   Backslash: '\\',
   IntlBackslash: '\\',
+  Backquote: '`',
   Slash: '/',
   NumpadAdd: '+',
   NumpadSubtract: '-',

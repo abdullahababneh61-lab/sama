@@ -38,7 +38,10 @@ export type ToolId =
   | 'objectSelection'
   | 'quickSelection'
   | 'magicWand'
-  | 'groupSelection';
+  | 'groupSelection'
+  | 'curvaturePen'
+  | 'arcSpiral'
+  | 'grid';
 
 /** Tools that create shapes by dragging on the canvas. */
 export type ShapeToolId = Extract<ToolId, 'rect' | 'ellipse' | 'line' | 'polygon'>;
@@ -174,6 +177,36 @@ export interface MagicWandOptions {
   contiguous: boolean;
 }
 
+export interface ArcSpiralOptions {
+  mode: 'arc' | 'spiral';
+  /** Spiral: number of full turns (winds). */
+  turns: number;
+  stroke: string;
+  strokeWidth: number;
+}
+
+export interface GridOptions {
+  mode: 'rect' | 'polar';
+  rows: number;
+  columns: number;
+  /** Polar: concentric circles, the outer edge included. */
+  rings: number;
+  /** Polar: lines from the centre to the edge. */
+  dividers: number;
+  stroke: string;
+  strokeWidth: number;
+}
+
+/**
+ * Settings of a generated shape, stored on the layer (`samaParams`) so the
+ * options bar can rebuild it after it was drawn. Sizes are in the layer's own
+ * (unscaled) units.
+ */
+export type ShapeParams =
+  | { type: 'spiral'; turns: number; radius: number; angle: number }
+  | { type: 'rectGrid'; rows: number; columns: number; width: number; height: number }
+  | { type: 'polarGrid'; rings: number; dividers: number; radius: number };
+
 /** How a new selection combines with the current one (see selectionModes.ts). */
 export type SelectionMode = 'new' | 'add' | 'subtract' | 'intersect';
 
@@ -196,6 +229,8 @@ export interface ToolOptions {
   quickSelection: QuickSelectionOptions;
   magicWand: MagicWandOptions;
   selectionRefine: SelectionRefineOptions;
+  arcSpiral: ArcSpiralOptions;
+  grid: GridOptions;
   /** Selection mode per selecting tool (a tool without an entry uses its default). */
   selectionModes: Partial<Record<ToolId, SelectionMode>>;
 }

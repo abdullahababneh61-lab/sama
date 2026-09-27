@@ -12,7 +12,7 @@ import { config, FabricObject, InteractiveFabricObject } from 'fabric';
 import '@erase2d/fabric';
 import './objects/BrushStroke';
 import './objects/PaintLayer';
-import type { LayerKind } from './types';
+import type { LayerKind, ShapeParams } from './types';
 
 declare module 'fabric' {
   interface FabricObject {
@@ -34,6 +34,8 @@ declare module 'fabric' {
     samaAutoName?: boolean;
     /** Set on image layers produced by a perspective crop: what the layer was before. */
     samaPerspective?: { originalType: LayerKind; text?: string };
+    /** For generated shapes (spiral, grids): the settings they were built from. */
+    samaParams?: ShapeParams;
     /** Set by @erase2d/fabric: which objects the eraser affects. */
     erasable?: boolean | 'deep';
   }
@@ -50,6 +52,7 @@ export const SAMA_PROPERTIES = [
   'samaSides',
   'samaAutoName',
   'samaPerspective',
+  'samaParams',
 ] as const;
 
 /** Accent colour used for selection handles, matches `--sw-accent`. */
