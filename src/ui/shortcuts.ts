@@ -42,6 +42,7 @@ export const SHORTCUT_REFERENCE: ShortcutGroup[] = [
       { keys: 'L', label: 'tool.ellipse' },
       { keys: '\\', label: 'tool.line' },
       { keys: 'U', label: 'shortcuts.cycleShapes' },
+      { keys: 'Shift+U', label: 'tool.flare' },
       { keys: 'Shift+\\', label: 'tool.arcSpiral' },
       { keys: 'Alt+Shift+\\', label: 'tool.grid' },
       { keys: 'C', label: 'tool.crop' },

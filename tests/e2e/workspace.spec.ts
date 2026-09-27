@@ -1859,3 +1859,148 @@ test.describe('pen and path tools', () => {
     expectNoErrors(errors);
   });
 });
+
+test.describe('polygon / star and flare', () => {
+  const active = (page: import('@playwright/test').Page) =>
+    page.evaluate(() => {
+      const o = (window as any).samaEditor.canvas.getActiveObject();
+      if (!o) return null;
+      // Scene position of path point (0, 0) — the shape's centre.
+      const m = o.calcTransformMatrix();
+      const px = -(o.pathOffset?.x ?? 0);
+      const py = -(o.pathOffset?.y ?? 0);
+      const centre = { x: m[0] * px + m[2] * py + m[4], y: m[1] * px + m[3] * py + m[5] };
+      return { name: o.samaName, kind: o.samaKind, params: o.samaParams, n: o.points?.length, kids: o.getObjects?.().length, centre, sides: o.samaSides };
+    });
+
+  test('U cycle and toolbar: Polygon / Star replaces Polygon; Shift+U = Flare', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    const tool = async () => (await workspaceState(page)).tool;
+    await page.keyboard.press('m');
+    for (const id of ['ellipse', 'line', 'polygonStar', 'rect']) {
+      await page.keyboard.press('u');
+      expect(await tool()).toBe(id);
+    }
+    await page.keyboard.press('Shift+U');
+    expect(await tool()).toBe('flare');
+    await expect(page.locator('.sw-toolbar [data-tool=polygon]')).toHaveCount(0);
+    for (const id of ['polygonStar', 'flare']) {
+      await page.locator(`.sw-toolbar [data-tool=${id}]`).click();
+      expect(await tool()).toBe(id);
+    }
+    expectNoErrors(errors);
+  });
+
+  test('polygon: centre-based drag sets size and rotation; Shift = upright; sides change after drawing keeps the centre', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.keyboard.press('m');
+    for (let i = 0; i < 3; i++) await page.keyboard.press('u');
+    expect((await workspaceState(page)).tool).toBe('polygonStar');
+    await drag(page, [300, 300], [420, 300]);
+    let o = (await active(page))!;
+    expect(o.kind).toBe('polygon');
+    expect(o.n).toBe(5);
+    expect(Math.abs(o.params.radius - 120)).toBeLessThanOrEqual(2);
+    expect(Math.abs(o.params.angle)).toBeLessThan(0.03); // a corner points at the pointer
+    expect(Math.abs(o.centre.x - 300)).toBeLessThanOrEqual(1.5);
+    expect((await workspaceState(page)).history.labels.at(-1)).toBe('Polygon');
+    // Shift: upright (flat bottom), whatever the drag direction.
+    await page.keyboard.down('Shift');
+    await drag(page, [700, 300], [760, 380]);
+    await page.keyboard.up('Shift');
+    o = (await active(page))!;
+    expect(o.params.angle).toBeCloseTo(-Math.PI / 2);
+    const c0 = o.centre;
+    // Sides after drawing: rebuilt in place, still upright, centre unchanged.
+    const sides = page.getByRole('toolbar', { name: 'Tool options' }).getByRole('textbox', { name: 'Sides' });
+    await sides.fill('6');
+    await sides.press('Enter');
+    o = (await active(page))!;
+    expect(o.n).toBe(6);
+    expect(o.params.angle).toBeCloseTo(-Math.PI / 2 + Math.PI / 6);
+    expect(Math.abs(o.centre.x - c0.x)).toBeLessThan(0.5);
+    expect(Math.abs(o.centre.y - c0.y)).toBeLessThan(0.5);
+    await page.keyboard.press('v');
+    expect((await workspaceState(page)).history.labels.at(-1)).toBe('Polygon sides');
+    // Uses the shared shape fill.
+    const fill = await page.evaluate(() => (window as any).samaEditor.canvas.getActiveObject().fill);
+    expect(fill).toBe(await page.evaluate(() => (window as any).samaEditor.store.getState().toolOptions.shape.fill));
+    expectNoErrors(errors);
+  });
+
+  test('star: points and inner radius, before and after drawing; the Properties sides field keeps it a star', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.locator('.sw-toolbar [data-tool=polygonStar]').click();
+    await page.getByTestId('polygon-star-mode').locator('[data-mode=star]').click();
+    await clickAt(page, 400, 400); // click = default size, upright
+    let o = (await active(page))!;
+    expect(o.name).toBe('Star');
+    expect(o.n).toBe(10);
+    expect(o.params).toMatchObject({ type: 'star', points: 5, innerRatio: 50, radius: 50 });
+    await page.evaluate(() => (window as any).samaEditor.updateToolOptions('polygonStar', { innerRatio: 30 }));
+    o = (await active(page))!;
+    expect(o.params.innerRatio).toBe(30);
+    expect(o.params.points).toBe(5);
+    await page.evaluate(() => (window as any).samaEditor.updateSelection({ sides: 7 }, { label: 'Polygon sides' }));
+    o = (await active(page))!;
+    expect(o.n).toBe(14);
+    expect(o.params).toMatchObject({ type: 'star', points: 7, innerRatio: 30 });
+    // Esc mid-drag creates nothing.
+    const layers = (await workspaceState(page)).layers.length;
+    const a = await toPage(page, 700, 700);
+    const b = await toPage(page, 800, 750);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 3 });
+    await page.keyboard.press('Escape');
+    await page.mouse.up();
+    expect((await workspaceState(page)).layers.length).toBe(layers);
+    expectNoErrors(errors);
+  });
+
+  test('flare: press-drag sizes the glow, then click places the rings; Enter uses the default; Esc cancels', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    await page.keyboard.press('Shift+U');
+    // Step 1: centre + glow radius.
+    const c = await toPage(page, 400, 400);
+    const r = await toPage(page, 480, 400);
+    await page.mouse.move(c.x, c.y);
+    await page.mouse.down();
+    await page.mouse.move(r.x, r.y, { steps: 4 });
+    await page.mouse.up();
+    expect((await workspaceState(page)).layers).toHaveLength(0); // not yet: rings next
+    // Step 2: click where the rings end.
+    await clickAt(page, 700, 600);
+    let o = (await active(page))!;
+    expect(o.name).toBe('Flare');
+    expect(o.kind).toBe('group');
+    expect(o.kids).toBe(9);
+    expect(Math.abs(o.params.radius - 80)).toBeLessThanOrEqual(2);
+    expect(Math.abs(o.params.ringsX - 300)).toBeLessThanOrEqual(2);
+    expect(Math.abs(o.params.ringsY - 200)).toBeLessThanOrEqual(2);
+    expect((await workspaceState(page)).history.labels.at(-1)).toBe('Flare');
+    // Enter in step 2: rings at the default place.
+    await clickAt(page, 200, 800);
+    await page.keyboard.press('Enter');
+    o = (await active(page))!;
+    expect(o.params.radius).toBe(60);
+    expect(o.params.ringsX).toBeCloseTo(126);
+    // Esc in step 2 cancels.
+    await clickAt(page, 800, 200);
+    await page.keyboard.press('Escape');
+    expect((await workspaceState(page)).layers).toHaveLength(2);
+    // It's a normal group: the Selection tool resizes it as one.
+    await page.keyboard.press('v');
+    await page.evaluate(() => {
+      const ed = (window as any).samaEditor;
+      const g = ed.canvas.getObjects()[0];
+      ed.selectObjects([g]);
+      g.set({ scaleX: 2, scaleY: 2 });
+      g.setCoords();
+      ed.commit('Scale');
+    });
+    const s = (await workspaceState(page)).selection;
+    expect(s.kind).toBe('group');
+    expectNoErrors(errors);
+  });
+});

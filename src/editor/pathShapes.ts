@@ -187,3 +187,47 @@ export function polarGridLayout(radius: number, rings: number, dividers: number)
   }
   return { radii, dividers: lines };
 }
+
+/**
+ * Vertices of a regular polygon centred on (0, 0) with circumradius
+ * `radius`; the first vertex points in direction `angle` (radians).
+ */
+export function regularPolygonVertices(sides: number, radius: number, angle: number): XY[] {
+  const n = Math.max(3, Math.round(sides));
+  const out: XY[] = [];
+  for (let k = 0; k < n; k++) {
+    const a = angle + (k * 2 * Math.PI) / n;
+    out.push({ x: radius * Math.cos(a), y: radius * Math.sin(a) });
+  }
+  return out;
+}
+
+/**
+ * Vertices of a star centred on (0, 0): `points` outer tips at `radius`
+ * alternating with inner corners at `radius × innerRatio / 100`; the first
+ * tip points in direction `angle`.
+ */
+export function starVertices(points: number, radius: number, innerRatio: number, angle: number): XY[] {
+  const n = Math.max(2, Math.round(points));
+  const inner = (radius * Math.max(1, Math.min(100, innerRatio))) / 100;
+  const out: XY[] = [];
+  for (let k = 0; k < n * 2; k++) {
+    const a = angle + (k * Math.PI) / n;
+    const r = k % 2 ? inner : radius;
+    out.push({ x: r * Math.cos(a), y: r * Math.sin(a) });
+  }
+  return out;
+}
+
+/**
+ * The upright orientation (Shift) — the angle of the first vertex, as the
+ * common drawing tools do it: a star has a tip straight up; a polygon sits
+ * on a flat bottom edge (so odd polygons point up, and even ones such as a
+ * square or hexagon have flat top and bottom sides).
+ */
+export function uprightAngle(count: number, star: boolean): number {
+  const up = -Math.PI / 2;
+  if (star) return up;
+  const n = Math.max(3, Math.round(count));
+  return n % 2 ? up : up + Math.PI / n;
+}

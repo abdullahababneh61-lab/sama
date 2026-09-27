@@ -21,6 +21,8 @@ import {
   FlipVertical2,
   Group,
   Grid3x3,
+  Pentagon,
+  Star,
   Ungroup,
 } from 'lucide-react';
 import { useEditor, useWorkspace } from '../workspace/context';
@@ -94,6 +96,8 @@ export function OptionsBar() {
       case 'line':
       case 'polygon':
         return <ShapeOptions />;
+      case 'polygonStar':
+        return <PolygonStarOptions />;
       case 'hand':
       case 'zoom':
         return <ViewOptions />;
@@ -277,6 +281,42 @@ function GridOptions() {
         <span className="sw-options__sep" />
       </span>
       <StrokeOptions stroke={o.stroke} strokeWidth={o.strokeWidth} onChange={set} />
+    </div>
+  );
+}
+
+/** Polygon / Star: the mode switch, sides or points + inner radius, and the shared shape fill/stroke. */
+function PolygonStarOptions() {
+  const editor = useEditor();
+  const t = useT();
+  const o = useWorkspace((s) => s.toolOptions.polygonStar);
+  const paint = useWorkspace((s) => s.toolOptions.shape);
+  const set = (p: Partial<typeof o>) => editor?.updateToolOptions('polygonStar', p);
+  return (
+    <div className="sw-options__group">
+      <span className="sw-options__cluster" role="group" aria-label={t('options.shapeMode')} data-testid="polygon-star-mode">
+        <IconButton label={t('options.polygon')} size="sm" active={o.mode === 'polygon'} onClick={() => set({ mode: 'polygon' })} data-mode="polygon">
+          <Pentagon size={16} />
+        </IconButton>
+        <IconButton label={t('options.star')} size="sm" active={o.mode === 'star'} onClick={() => set({ mode: 'star' })} data-mode="star">
+          <Star size={16} />
+        </IconButton>
+        <span className="sw-options__sep" />
+      </span>
+      <span className="sw-options__cluster">
+        {o.mode === 'polygon' ? (
+          <NumberField label={t('props.sides')} value={o.sides} min={3} max={100} width={90} onChange={(v) => set({ sides: Math.round(v) })} />
+        ) : (
+          <>
+            <NumberField label={t('options.points')} value={o.points} min={2} max={100} width={96} onChange={(v) => set({ points: Math.round(v) })} />
+            <NumberField label={t('options.innerRadius')} title={t('options.innerRadiusTitle')} value={o.innerRatio} min={1} max={100} suffix="%" width={116} onChange={(v) => set({ innerRatio: v })} />
+          </>
+        )}
+        <span className="sw-options__sep" />
+      </span>
+      <span className="sw-options__cluster">
+        <PaintOptions fill={paint.fill} stroke={paint.stroke} strokeWidth={paint.strokeWidth} onChange={(p) => editor?.updateToolOptions('shape', p)} />
+      </span>
     </div>
   );
 }

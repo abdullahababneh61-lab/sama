@@ -113,6 +113,9 @@ import { GroupSelectionTool } from './tools/GroupSelectionTool';
 import { CurvaturePenTool } from './tools/CurvaturePenTool';
 import { ArcSpiralTool } from './tools/ArcSpiralTool';
 import { GridTool } from './tools/GridTool';
+import { PolygonStarTool } from './tools/PolygonStarTool';
+import { FlareTool } from './tools/FlareTool';
+import { isPolygonStar, rebuildPolygonStar, withCount } from './polygonStar';
 import { PixelSelection, type CombineMode, type SelectionShape } from './pixelSelection';
 import { SelectionAnts } from './SelectionAnts';
 import { defaultSelectionMode } from './selectionModes';
@@ -283,6 +286,8 @@ export class Editor {
       curvaturePen: new CurvaturePenTool(this),
       arcSpiral: new ArcSpiralTool(this),
       grid: new GridTool(this),
+      polygonStar: new PolygonStarTool(this),
+      flare: new FlareTool(this),
     };
 
     this.bindCanvasEvents();
@@ -1496,7 +1501,10 @@ export class Editor {
       const r = Math.max(0, patch.cornerRadius);
       single.set({ rx: r, ry: r });
     }
-    if (single instanceof Polygon && patch.sides !== undefined) {
+    if (isPolygonStar(single) && patch.sides !== undefined) {
+      // Made by the Polygon / Star tool: keep its rotation (and star shape).
+      rebuildPolygonStar(single, withCount(single.samaParams, patch.sides));
+    } else if (single instanceof Polygon && patch.sides !== undefined) {
       this.setPolygonSides(single, patch.sides);
     }
     if (single instanceof IText) this.applyTextPatch(single, patch);
@@ -2710,9 +2718,15 @@ export class Editor {
       this.setTool(toolKeys[lower]);
       return true;
     }
+    // Shift+U: Flare (Illustrator keeps it with the shape tools, which U cycles).
+    if (lower === 'u' && e.shiftKey && !e.altKey) {
+      this.setTool('flare');
+      return true;
+    }
     if (lower === 'u' && !e.altKey) {
       // U cycles through the shape tools (Photoshop convention).
-      const cycle: ToolId[] = ['rect', 'ellipse', 'line', 'polygon'];
+      // (Polygon / Star took the old Polygon tool's place.)
+      const cycle: ToolId[] = ['rect', 'ellipse', 'line', 'polygonStar'];
       const i = cycle.indexOf(this.activeToolId);
       this.setTool(cycle[(i + 1) % cycle.length]);
       return true;

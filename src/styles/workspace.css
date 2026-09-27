@@ -1707,16 +1707,21 @@
 }
 
 /* Toolbar columns by window height (like Photoshop's multi-column tools
-   panel): two columns by default, one on very tall windows, three on short
-   ones. */
+   panel): two columns by default, one on very tall windows, three or four
+   on short ones. */
 @media (min-height: 1360px) {
   .sw-toolbar {
     --sw-tool-cols: 1;
   }
 }
-@media (max-height: 810px) {
+@media (max-height: 860px) {
   .sw-toolbar {
     --sw-tool-cols: 3;
+  }
+}
+@media (max-height: 710px) {
+  .sw-toolbar {
+    --sw-tool-cols: 4;
   }
 }
 

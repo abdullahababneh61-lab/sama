@@ -75,3 +75,39 @@ describe('grids', () => {
     expect(dividers[0].b.y).toBeCloseTo(-80);
   });
 });
+
+import { regularPolygonVertices, starVertices, uprightAngle } from '../../src/editor/pathShapes';
+import { withCount } from '../../src/editor/polygonStar';
+
+describe('polygon and star', () => {
+  it('polygon vertices sit on the circumcircle, the first in the drag direction', () => {
+    const v = regularPolygonVertices(5, 100, 0);
+    expect(v).toHaveLength(5);
+    expect(v[0].x).toBeCloseTo(100);
+    expect(v[0].y).toBeCloseTo(0);
+    for (const p of v) expect(Math.hypot(p.x, p.y)).toBeCloseTo(100);
+  });
+  it('star alternates tips and inner corners', () => {
+    const v = starVertices(5, 100, 40, -Math.PI / 2);
+    expect(v).toHaveLength(10);
+    expect(Math.hypot(v[0].x, v[0].y)).toBeCloseTo(100);
+    expect(Math.hypot(v[1].x, v[1].y)).toBeCloseTo(40);
+    expect(v[0].x).toBeCloseTo(0); // tip straight up
+    expect(v[0].y).toBeCloseTo(-100);
+  });
+  it('upright: flat bottom edge for polygons, a tip up for stars', () => {
+    for (const n of [3, 4, 5, 6, 8]) {
+      const v = regularPolygonVertices(n, 50, uprightAngle(n, false));
+      const maxY = Math.max(...v.map((p) => p.y));
+      expect(v.filter((p) => Math.abs(p.y - maxY) < 1e-9)).toHaveLength(2);
+    }
+    expect(uprightAngle(7, true)).toBeCloseTo(-Math.PI / 2);
+  });
+  it('changing the count keeps an upright shape upright, and any other rotation as it was', () => {
+    const upright = withCount({ type: 'polygon', sides: 5, radius: 10, angle: uprightAngle(5, false) }, 6);
+    expect(upright).toMatchObject({ sides: 6, angle: uprightAngle(6, false) });
+    const tilted = withCount({ type: 'polygon', sides: 5, radius: 10, angle: 0.3 }, 6);
+    expect(tilted).toMatchObject({ sides: 6, angle: 0.3 });
+    expect(withCount({ type: 'star', points: 5, innerRatio: 50, radius: 10, angle: 0 }, 1)).toMatchObject({ points: 2 });
+  });
+});

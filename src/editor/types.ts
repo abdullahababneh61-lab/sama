@@ -41,7 +41,9 @@ export type ToolId =
   | 'groupSelection'
   | 'curvaturePen'
   | 'arcSpiral'
-  | 'grid';
+  | 'grid'
+  | 'polygonStar'
+  | 'flare';
 
 /** Tools that create shapes by dragging on the canvas. */
 export type ShapeToolId = Extract<ToolId, 'rect' | 'ellipse' | 'line' | 'polygon'>;
@@ -197,6 +199,14 @@ export interface GridOptions {
   strokeWidth: number;
 }
 
+export interface PolygonStarOptions {
+  mode: 'polygon' | 'star';
+  sides: number;
+  points: number;
+  /** Star: inner radius as a percentage of the outer radius (depth of the notches). */
+  innerRatio: number;
+}
+
 /**
  * Settings of a generated shape, stored on the layer (`samaParams`) so the
  * options bar can rebuild it after it was drawn. Sizes are in the layer's own
@@ -205,7 +215,10 @@ export interface GridOptions {
 export type ShapeParams =
   | { type: 'spiral'; turns: number; radius: number; angle: number }
   | { type: 'rectGrid'; rows: number; columns: number; width: number; height: number }
-  | { type: 'polarGrid'; rings: number; dividers: number; radius: number };
+  | { type: 'polarGrid'; rings: number; dividers: number; radius: number }
+  | { type: 'polygon'; sides: number; radius: number; angle: number }
+  | { type: 'star'; points: number; innerRatio: number; radius: number; angle: number }
+  | { type: 'flare'; radius: number; ringsX: number; ringsY: number };
 
 /** How a new selection combines with the current one (see selectionModes.ts). */
 export type SelectionMode = 'new' | 'add' | 'subtract' | 'intersect';
@@ -231,6 +244,7 @@ export interface ToolOptions {
   selectionRefine: SelectionRefineOptions;
   arcSpiral: ArcSpiralOptions;
   grid: GridOptions;
+  polygonStar: PolygonStarOptions;
   /** Selection mode per selecting tool (a tool without an entry uses its default). */
   selectionModes: Partial<Record<ToolId, SelectionMode>>;
 }
