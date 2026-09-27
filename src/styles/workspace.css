@@ -324,6 +324,31 @@
   border-bottom: 0;
 }
 
+/* Pop-out tool groups (Photoshop-style): corner triangle on the button… */
+.sw-tool-group-mark {
+  position: absolute;
+  inset-inline-end: 3px;
+  bottom: 3px;
+  width: 0;
+  height: 0;
+  border-bottom: 4px solid currentColor;
+  border-inline-start: 4px solid transparent;
+  opacity: 0.65;
+  pointer-events: none;
+}
+/* …no tooltip while its list is open… */
+.sw-icon-btn--group[aria-expanded='true']:hover::after {
+  display: none;
+}
+/* …and the list of variants. */
+.sw-tool-flyout {
+  min-width: 250px;
+  padding: 5px;
+}
+.sw-tool-flyout__item {
+  gap: 8px;
+}
+
 /* Icon buttons + tooltips */
 .sw-icon-btn {
   position: relative;

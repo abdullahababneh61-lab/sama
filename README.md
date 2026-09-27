@@ -47,6 +47,14 @@ existing Chromium: `CHROMIUM_PATH=/path/to/chrome npm run test:e2e`.)
 
 ### Tools
 
+The toolbar follows Photoshop's order: selection tools first, then Crop,
+then painting, drawing and viewing tools. Tools that are variants of each
+other share one button with a small corner triangle (a pop-out group): click
+it to use the variant it shows, or **hold it / right-click it** to pick
+another variant, which then becomes the button's face. The groups are the
+Marquees (Rectangular, Elliptical, Single Row/Column) and the Lassos (Lasso,
+Polygonal, Magnetic). Keyboard shortcuts select variants directly.
+
 | Tool | Key | Notes |
 | ---- | --- | ----- |
 | Selection (Move / Select) | `V` | Click to select (8 resize handles + rotation), drag to move. Corner handles resize proportionally (hold Shift for free resizing); edge handles resize one dimension. Drag on empty space to marquee-select every object it touches; Shift+click adds/removes. Rotation snaps to 15° with Shift. `Ctrl`/`⌘`+click selects inside groups; double-click a group to go inside it. Alt+drag duplicates. Esc deselects, Delete removes. |
@@ -55,7 +63,7 @@ existing Chromium: `CHROMIUM_PATH=/path/to/chrome npm run test:e2e`.)
 | Artboard | `Shift+O` | Artboards show with a border and their name. Drag on the empty pasteboard to add "Artboard N"; drag a border or handle to resize; drag inside to move an artboard together with its artwork; double-click the name to rename; Delete removes the artboard and its artwork (asks first). The first artboard is the main one — its name is the document name and it's what PNG export renders. |
 | Rectangular Marquee | `Shift+M` | Drag to select an area (animated "marching ants"). Shift = square, Alt = from centre. A new drag replaces the selection; Shift held when starting adds to it. Click or Esc deselects. |
 | Elliptical Marquee | `Shift+M` again | Same, for an elliptical area (Shift = circle). |
-| Single Row/Column Marquee | options bar | Click to select one 1-px row across the artboard (or one column down it); pick Row/Column in the marquee options. Shift+click adds. |
+| Single Row/Column Marquee | marquee pop-out or options bar | Click to select one 1-px row across the artboard (or one column down it); pick Row/Column in the marquee options. Shift+click adds. |
 | Lasso | `Q` | Drag to draw a freehand selection; it closes when you release. Shift when starting adds. Esc cancels. |
 | Polygonal Lasso | `Shift+L` | Click to place points (a live segment follows the pointer; Shift = 45°). Click the first point, double-click or press Enter to close; Backspace removes the last point; Esc cancels. |
 | Magnetic Lasso | `Alt+Shift+L` | Click once, then move along an edge: the outline clings to the strongest contrast edge nearby and places anchors automatically (click to add one). Close on the first point, double-click or Enter; Backspace removes an anchor; Esc cancels. |

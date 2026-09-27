@@ -1233,3 +1233,65 @@ test.describe('object-based selection tools', () => {
     expectNoErrors(errors);
   });
 });
+
+test.describe('toolbar layout', () => {
+  test('Crop follows the selection tools; marquee and lasso pop-out groups; shortcuts unchanged', async ({ page }) => {
+    const errors = await openWorkspace(page);
+    const groups = await page.evaluate(() =>
+      [...document.querySelectorAll('.sw-toolbar__group')].map((g) =>
+        [...g.querySelectorAll('button[data-tool]')].map((b) => (b as HTMLElement).dataset.toolGroup ?? (b as HTMLElement).dataset.tool),
+      ),
+    );
+    expect(groups.slice(0, 3)).toEqual([
+      ['select', 'direct', 'groupSelection', 'artboard'],
+      ['marquee', 'lasso', 'objectSelection', 'quickSelection', 'magicWand'],
+      ['crop', 'perspectiveCrop'],
+    ]);
+    // Variants are not separate buttons any more.
+    for (const id of ['ellipseMarquee', 'singleRowColumnMarquee', 'polygonalLasso', 'magneticLasso']) {
+      await expect(page.locator(`.sw-toolbar [data-tool=${id}]`)).toHaveCount(0);
+    }
+    const tool = async () => (await workspaceState(page)).tool;
+    const marquee = page.locator('.sw-toolbar [data-tool-group=marquee]');
+    const lasso = page.locator('.sw-toolbar [data-tool-group=lasso]');
+    // Click selects the face; holding opens the list without selecting.
+    await marquee.click();
+    expect(await tool()).toBe('rectMarquee');
+    await page.keyboard.press('v');
+    const box = (await marquee.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(500);
+    await page.mouse.up();
+    await expect(page.getByTestId('tool-flyout-marquee')).toBeVisible();
+    expect(await tool()).toBe('select');
+    await page.getByTestId('tool-flyout-marquee').locator('[data-tool=ellipseMarquee]').click();
+    expect(await tool()).toBe('ellipseMarquee');
+    await expect(marquee).toHaveAttribute('data-tool', 'ellipseMarquee');
+    await expect(page.getByTestId('tool-flyout-marquee')).toBeHidden();
+    // Right-click opens it too; Escape closes it.
+    await lasso.click({ button: 'right' });
+    await expect(page.getByTestId('tool-flyout-lasso')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('tool-flyout-lasso')).toBeHidden();
+    // Shortcuts work as before and update the button faces.
+    await page.keyboard.press('Shift+M');
+    expect(await tool()).toBe('rectMarquee');
+    await page.keyboard.press('Shift+M');
+    expect(await tool()).toBe('ellipseMarquee');
+    await page.keyboard.press('Shift+L');
+    expect(await tool()).toBe('polygonalLasso');
+    await expect(lasso).toHaveAttribute('data-tool', 'polygonalLasso');
+    await page.keyboard.press('Alt+Shift+L');
+    expect(await tool()).toBe('magneticLasso');
+    await page.keyboard.press('q');
+    expect(await tool()).toBe('lasso');
+    await page.keyboard.press('c');
+    expect(await tool()).toBe('crop');
+    // The Crop button works from its new place.
+    await page.keyboard.press('v');
+    await page.locator('.sw-toolbar [data-tool=crop]').click();
+    expect(await tool()).toBe('crop');
+    expectNoErrors(errors);
+  });
+});
