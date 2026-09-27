@@ -94,7 +94,6 @@ export const en = {
   'options.selectionSize': 'Selection: {w} × {h} px',
   'options.noSelection': 'No selection',
   'options.invertSelection': 'Invert',
-  'options.cropToSelection': 'Crop to Selection',
   'options.tolerance': 'Tolerance',
   'options.contiguous': 'Contiguous',
   'artboard.count': 'Artboards: {count}',

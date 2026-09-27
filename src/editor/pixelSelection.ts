@@ -11,7 +11,7 @@
  *
  * Everything that uses the selection reads this one mask: the marching ants
  * (drawn where the mask crosses 50 %, like Photoshop), the size readout,
- * Invert, Crop to Selection, Cut/Copy to New Layer, and the refinements
+ * Invert, Cut/Copy to New Layer, and the refinements
  * (Feather, Smooth, Expand, Contract) that rewrite it.
  *
  * - The mask covers the artboard only: parts of a shape outside the artboard

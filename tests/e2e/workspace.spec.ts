@@ -1003,7 +1003,7 @@ test.describe('marquee tools', () => {
     expectNoErrors(errors);
   });
 
-  test('region selections: Delete shows a notice, Invert, Crop to Selection, persist across tools', async ({ page }) => {
+  test('region selections: Delete shows a notice, Invert, persist across tools; no canvas cropping here', async ({ page }) => {
     const errors = await openWorkspace(page);
     await addRect(page, '#e5484d', [100, 100], [300, 300]);
     await page.keyboard.press('Shift+M');
@@ -1017,10 +1017,10 @@ test.describe('marquee tools', () => {
     await page.getByRole('button', { name: 'Invert' }).click();
     expect(await regionHas(page, 10, 10)).toBe(true);
     await page.getByRole('button', { name: 'Invert' }).click();
-    await page.getByRole('button', { name: 'Crop to Selection' }).click();
-    const doc = await page.evaluate(() => (window as any).samaEditor.store.getState().doc);
-    expect(Math.abs(doc.width - 400)).toBeLessThanOrEqual(3);
-    expect(Math.abs(doc.height - 300)).toBeLessThanOrEqual(3);
+    expect(await regionHas(page, 10, 10)).toBe(false);
+    // Selection tools don't resize the canvas: that's the Crop tool's job.
+    await expect(page.locator('.sw-options').getByRole('button', { name: /crop/i })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Deselect' }).click();
     expect(await region(page)).toBeNull();
     expectNoErrors(errors);
   });
@@ -1414,7 +1414,7 @@ test.describe('cut / copy to new layer', () => {
 });
 
 test.describe('selection refinement', () => {
-  test('Expand, Contract, Smooth and Feather rewrite the shared selection (readout and crop follow)', async ({ page }) => {
+  test('Expand, Contract, Smooth and Feather rewrite the shared selection (readout and bounds follow)', async ({ page }) => {
     const errors = await openWorkspace(page);
     await page.evaluate(() => {
       const ed = (window as any).samaEditor;
@@ -1437,11 +1437,10 @@ test.describe('selection refinement', () => {
       return Array.from(s.getMask() as Uint8Array).filter((v) => v > 0 && v < 255).length;
     });
     expect(soft).toBeGreaterThan(1000);
-    // Crop to Selection uses the refined selection.
-    await page.getByRole('button', { name: 'Crop to Selection' }).click();
-    const doc = await page.evaluate(() => (window as any).samaEditor.store.getState().doc);
-    expect(doc.width).toBeGreaterThan(280); // feathered edge reaches a little beyond the 50 % line
-    expect(doc.width).toBeLessThan(295);
+    // The bounds include the feathered edge, a little beyond the 50 % line.
+    const feathered = (await bounds())!;
+    expect(feathered.width).toBeGreaterThan(280);
+    expect(feathered.width).toBeLessThan(295);
     expectNoErrors(errors);
   });
 });

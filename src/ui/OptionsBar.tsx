@@ -326,9 +326,6 @@ function RegionOptions({ marquee = false, quickSelection = false }: { marquee?: 
         <button type="button" className="sw-btn sw-btn--ghost" onClick={() => editor?.invertPixelSelection()}>
           {t('options.invertSelection')}
         </button>
-        <button type="button" className="sw-btn sw-btn--ghost" disabled={!sel} onClick={() => editor?.cropToPixelSelection()}>
-          {t('options.cropToSelection')}
-        </button>
         <button type="button" className="sw-btn sw-btn--ghost" disabled={!sel} onClick={() => editor?.clearPixelSelection()}>
           {t('menu.deselect')}
         </button>

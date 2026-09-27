@@ -62,7 +62,7 @@ Polygonal, Magnetic). Keyboard shortcuts select variants directly.
 | Group Selection | `Shift+V` | First click selects the innermost layer inside a group; each further click on it selects the group one level up. Drag moves the selected item without ungrouping. Esc deselects. |
 | Artboard | `Shift+O` | Artboards show with a border and their name. Drag on the empty pasteboard to add "Artboard N"; drag a border or handle to resize; drag inside to move an artboard together with its artwork; double-click the name to rename; Delete removes the artboard and its artwork (asks first). The first artboard is the main one — its name is the document name and it's what PNG export renders. |
 | Rectangular Marquee | `Shift+M` | Drag to select an area (animated "marching ants"). Shift = square, Alt = from centre. A new drag replaces the selection; Shift held when starting adds to it. Click or Esc deselects. |
-| *Selection actions* (options bar of every marquee/lasso/Quick Selection tool) | `Ctrl+J` / `Ctrl+Shift+J` | **Copy to New Layer** / **Cut to New Layer**: the pixels inside the selection's exact shape go to a new image layer right above the original (transparent elsewhere); Cut also leaves the matching hole in the original. The new layer is selected, the selection cleared, one undo step. Without a selection, `Ctrl+J` still duplicates. **Feather** (radius, default 2 px) softens the selection's edge, **Smooth** rounds off jaggies and specks, **Expand / Contract** (amount) grow or shrink it. Plus Invert, Crop to Selection, Deselect. |
+| *Selection actions* (options bar of every marquee/lasso/Quick Selection tool) | `Ctrl+J` / `Ctrl+Shift+J` | **Copy to New Layer** / **Cut to New Layer**: the pixels inside the selection's exact shape go to a new image layer right above the original (transparent elsewhere); Cut also leaves the matching hole in the original. The new layer is selected, the selection cleared, one undo step. Without a selection, `Ctrl+J` still duplicates. **Feather** (radius, default 2 px) softens the selection's edge, **Smooth** rounds off jaggies and specks, **Expand / Contract** (amount) grow or shrink it. Plus Invert and Deselect. (Selection tools never resize the canvas — use the Crop tool for that.) |
 | Elliptical Marquee | `Shift+M` again | Same, for an elliptical area (Shift = circle). |
 | Single Row/Column Marquee | marquee pop-out or options bar | Click to select one 1-px row across the artboard (or one column down it); pick Row/Column in the marquee options. Shift+click adds. |
 | Lasso | `Q` | Drag to draw a freehand selection; it closes when you release. Shift when starting adds. Esc cancels. |
@@ -221,8 +221,8 @@ Flagged deliberately rather than left silent:
   even backgrounds; it doesn't rebuild detailed patterns the way Photoshop's
   content-aware fill does.
 - **Region selections** (marquee, lasso, Quick Selection) are pixel masks with
-  soft edges: Feather, Smooth, Expand and Contract refine them; Invert, Crop
-  to Selection and **Cut / Copy to New Layer** use them. Cut/Copy to New
+  soft edges: Feather, Smooth, Expand and Contract refine them; Invert and
+  **Cut / Copy to New Layer** use them. Cut/Copy to New
   Layer works on **image layers** only — shapes, text and brush strokes are
   vectors and would need rasterizing first (not built yet). Painting,
   erasing and Delete don't yet act inside a selection (Delete shows a

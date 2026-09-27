@@ -946,15 +946,6 @@ export class Editor {
     this.publishPixelSelection();
   }
 
-  /** Crops the artboard to the region selection's bounding box (uses the regular crop). */
-  cropToPixelSelection() {
-    const b = this.pixelSelection.bounds();
-    if (!b) return;
-    this.pixelSelection.clear();
-    this.publishPixelSelection();
-    this.cropArtboard({ x: b.x, y: b.y, w: b.width, h: b.height });
-  }
-
   /** Pushes the region selection's bounds to the UI and redraws the marching ants. */
   publishPixelSelection() {
     const b = this.pixelSelection.bounds();
