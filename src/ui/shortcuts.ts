@@ -61,6 +61,8 @@ export const SHORTCUT_REFERENCE: ShortcutGroup[] = [
       { keys: 'Mod+Shift+Z / Mod+Y', label: 'menu.redo' },
       { keys: 'Mod+C / Mod+X / Mod+V', label: 'shortcuts.clipboard' },
       { keys: 'Mod+J / Mod+D', label: 'menu.duplicate' },
+      { keys: 'Mod+J', label: 'shortcuts.copyToNewLayer' },
+      { keys: 'Mod+Shift+J', label: 'shortcuts.cutToNewLayer' },
       { keys: 'Alt+Drag', label: 'shortcuts.altDrag' },
       { keys: 'Delete / Backspace', label: 'menu.delete' },
       { keys: 'Mod+A', label: 'menu.selectAll' },

@@ -69,6 +69,7 @@ export const DEFAULT_TOOL_OPTIONS: ToolOptions = {
   singleRowColumnMarquee: { orientation: 'row' },
   quickSelection: { size: 24 },
   magicWand: { tolerance: 32, contiguous: true },
+  selectionRefine: { feather: 2, amount: 4 },
   shape: { fill: '#d9d9d9', stroke: null, strokeWidth: 2, cornerRadius: 0, sides: 6 },
   pen: { fill: null, stroke: '#1f1f24', strokeWidth: 2 },
   text: {

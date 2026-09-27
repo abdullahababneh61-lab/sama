@@ -3,9 +3,16 @@
  * lasso and quick-selection tools.
  *
  * Unlike object selection (which picks whole layers), a region selection is
- * an area of the artboard. It is stored as a bitmap mask with one byte per
- * artboard pixel (1 = selected), so shapes can be added and subtracted
- * freely and the outline is always the exact union.
+ * an area of the artboard. It is stored as a mask with one byte per artboard
+ * pixel: how selected the pixel is, 0 (not) … 255 (fully). Hard-edged tools
+ * produce only 0 and 255; Feather creates the values in between (a soft
+ * edge). Shapes combine freely (add = the higher value, subtract = remove),
+ * and the outline is always the exact union.
+ *
+ * Everything that uses the selection reads this one mask: the marching ants
+ * (drawn where the mask crosses 50 %, like Photoshop), the size readout,
+ * Invert, Crop to Selection, Cut/Copy to New Layer, and the refinements
+ * (Feather, Smooth, Expand, Contract) that rewrite it.
  *
  * - The mask covers the artboard only: parts of a shape outside the artboard
  *   are ignored (like Photoshop, where a selection can't extend past the
@@ -15,6 +22,8 @@
  *   slightly coarser than one artboard pixel.
  * - A pixel belongs to a shape when its centre lies inside the shape (no
  *   anti-aliasing), which keeps selections crisp and deterministic.
+ * - "Selected" (for `contains`, `pixelCount` and the outline) means at least
+ *   50 % selected; the bounding box includes every partly selected pixel.
  *
  * This module is pure (no DOM), so it's unit-tested directly.
  */
@@ -74,12 +83,12 @@ export class PixelSelection {
     return this.bounds() === null;
   }
 
-  /** A copy of the mask (all zeros when nothing is selected). */
+  /** A copy of the mask, values 0–255 (all zeros when nothing is selected). */
   getMask(): Uint8Array {
     return this.mask ? this.mask.slice() : new Uint8Array(this.width * this.height);
   }
 
-  /** Replaces the whole mask (e.g. after a quick-selection stroke). */
+  /** Replaces the whole mask (values 0–255), e.g. after a quick-selection stroke. */
   setMask(mask: Uint8Array) {
     if (mask.length !== this.width * this.height) throw new Error('Mask size mismatch');
     this.mask = mask;
@@ -98,32 +107,81 @@ export class PixelSelection {
     const i = Math.floor(x * this.scale);
     const j = Math.floor(y * this.scale);
     if (i < 0 || j < 0 || i >= this.width || j >= this.height) return false;
-    return this.mask[j * this.width + i] === 1;
+    return this.mask[j * this.width + i] >= 128;
   }
 
   /** Adds, subtracts or replaces with a shape. */
   combine(shape: SelectionShape, mode: CombineMode) {
-    this.combineMask(this.rasterize(shape), mode);
+    const m = this.rasterize(shape);
+    for (let i = 0; i < m.length; i++) if (m[i]) m[i] = 255;
+    this.combineMask(m, mode);
   }
 
-  /** Adds, subtracts or replaces with a mask of the same size. */
+  /** Adds, subtracts or replaces with a mask (values 0–255) of the same size. */
   combineMask(shapeMask: Uint8Array, mode: CombineMode) {
     if (mode === 'replace') {
       this.mask = shapeMask;
     } else {
       const m = this.mask ?? new Uint8Array(this.width * this.height);
-      if (mode === 'add') for (let i = 0; i < m.length; i++) m[i] |= shapeMask[i];
-      else for (let i = 0; i < m.length; i++) if (shapeMask[i]) m[i] = 0;
+      if (mode === 'add') for (let i = 0; i < m.length; i++) m[i] = Math.max(m[i], shapeMask[i]);
+      else for (let i = 0; i < m.length; i++) m[i] = Math.min(m[i], 255 - shapeMask[i]);
       this.mask = m;
     }
     this.changed();
   }
 
-  /** Selects everything that wasn't selected, and vice versa. */
+  /** Selects everything that wasn't selected, and vice versa (soft edges stay soft). */
   invert() {
     const m = this.getMask();
-    for (let i = 0; i < m.length; i++) m[i] ^= 1;
+    for (let i = 0; i < m.length; i++) m[i] = 255 - m[i];
     this.mask = m;
+    this.changed();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Refinements (amounts in artboard pixels). Expand, Contract and Smooth
+  // work on the 50 % outline and give a hard edge; Feather softens it.
+
+  /** Softens the edge: a blur of the mask with the given radius. */
+  feather(radius: number) {
+    if (!this.mask || radius <= 0) return;
+    const sigma = (radius * this.scale) / 2;
+    // Three box blurs ≈ a Gaussian with that sigma.
+    const box = Math.max(1, Math.round((Math.sqrt(1 + 4 * sigma * sigma) - 1) / 2));
+    this.setRefined(blurMask(this.mask, this.width, this.height, box, 3));
+  }
+
+  /** Rounds off jagged bits, specks and small holes smaller than `radius`. */
+  smooth(radius: number) {
+    if (!this.mask || radius <= 0) return;
+    this.setRefined(majorityFilter(this.mask, this.width, this.height, Math.max(1, Math.round(radius * this.scale))));
+  }
+
+  /** Grows the selection outward by `amount`. */
+  expand(amount: number) {
+    if (!this.mask || amount <= 0) return;
+    const n = amount * this.scale;
+    const d = distanceToSelected(this.mask, this.width, this.height, true);
+    const out = new Uint8Array(this.mask.length);
+    for (let i = 0; i < out.length; i++) out[i] = d[i] <= n * n ? 255 : 0;
+    this.setRefined(out);
+  }
+
+  /**
+   * Shrinks the selection inward by `amount`. Edges lying on the artboard's
+   * border don't move (Photoshop's default).
+   */
+  contract(amount: number) {
+    if (!this.mask || amount <= 0) return;
+    const n = amount * this.scale;
+    const d = distanceToSelected(this.mask, this.width, this.height, false);
+    const out = new Uint8Array(this.mask.length);
+    for (let i = 0; i < out.length; i++) out[i] = this.mask[i] >= 128 && d[i] > n * n ? 255 : 0;
+    this.setRefined(out);
+  }
+
+  private setRefined(mask: Uint8Array) {
+    this.mask = mask.some((v) => v > 0) ? mask : null;
     this.changed();
   }
 
@@ -168,11 +226,11 @@ export class PixelSelection {
     return this.boundsCache;
   }
 
-  /** Number of selected mask pixels. */
+  /** Number of (at least 50 %) selected mask pixels. */
   get pixelCount(): number {
     if (!this.mask) return 0;
     let n = 0;
-    for (let i = 0; i < this.mask.length; i++) n += this.mask[i];
+    for (let i = 0; i < this.mask.length; i++) if (this.mask[i] >= 128) n++;
     return n;
   }
 
@@ -185,7 +243,7 @@ export class PixelSelection {
    */
   outline(): Float32Array[] {
     if (this.outlineCache) return this.outlineCache;
-    this.outlineCache = this.mask ? traceContours(this.mask, this.width, this.height, 1 / this.scale) : [];
+    this.outlineCache = this.mask ? traceContours(threshold(this.mask), this.width, this.height, 1 / this.scale) : [];
     return this.outlineCache;
   }
 
@@ -207,6 +265,118 @@ export class PixelSelection {
     this.boundsCache = undefined;
     this.version++;
   }
+}
+
+/** 1 where the mask is at least 50 % selected, else 0. */
+export function threshold(mask: Uint8Array): Uint8Array {
+  const out = new Uint8Array(mask.length);
+  for (let i = 0; i < mask.length; i++) out[i] = mask[i] >= 128 ? 1 : 0;
+  return out;
+}
+
+/** `passes` separable box blurs of radius `box` (edges extended, so borders don't fade). */
+export function blurMask(mask: Uint8Array, w: number, h: number, box: number, passes: number): Uint8Array {
+  const a = Float32Array.from(mask);
+  const b = new Float32Array(a.length);
+  const pass = (src: Float32Array, dst: Float32Array, horizontal: boolean) => {
+    const lines = horizontal ? h : w;
+    const len = horizontal ? w : h;
+    const step = horizontal ? 1 : w;
+    const k = 2 * box + 1;
+    for (let l = 0; l < lines; l++) {
+      const base = horizontal ? l * w : l;
+      const at = (i: number) => src[base + Math.min(len - 1, Math.max(0, i)) * step];
+      let sum = 0;
+      for (let i = -box; i <= box; i++) sum += at(i);
+      for (let i = 0; i < len; i++) {
+        dst[base + i * step] = sum / k;
+        sum += at(i + box + 1) - at(i - box);
+      }
+    }
+  };
+  for (let p = 0; p < passes; p++) {
+    pass(a, b, true);
+    pass(b, a, false);
+  }
+  const out = new Uint8Array(mask.length);
+  for (let i = 0; i < out.length; i++) out[i] = Math.round(Math.min(255, Math.max(0, a[i])));
+  return out;
+}
+
+/** Each pixel becomes selected when most of the (2r+1)² window around it is (ties keep it as is). */
+export function majorityFilter(mask: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  // Summed-area table of the 50 % selection.
+  const sat = new Int32Array((w + 1) * (h + 1));
+  for (let y = 0; y < h; y++) {
+    let row = 0;
+    for (let x = 0; x < w; x++) {
+      row += mask[y * w + x] >= 128 ? 1 : 0;
+      sat[(y + 1) * (w + 1) + x + 1] = sat[y * (w + 1) + x + 1] + row;
+    }
+  }
+  const out = new Uint8Array(mask.length);
+  for (let y = 0; y < h; y++) {
+    const y0 = Math.max(0, y - r);
+    const y1 = Math.min(h, y + r + 1);
+    for (let x = 0; x < w; x++) {
+      const x0 = Math.max(0, x - r);
+      const x1 = Math.min(w, x + r + 1);
+      const count = sat[y1 * (w + 1) + x1] - sat[y0 * (w + 1) + x1] - sat[y1 * (w + 1) + x0] + sat[y0 * (w + 1) + x0];
+      const area = (x1 - x0) * (y1 - y0);
+      const self = mask[y * w + x] >= 128;
+      out[y * w + x] = 2 * count > area || (2 * count === area && self) ? 255 : 0;
+    }
+  }
+  return out;
+}
+
+/**
+ * Squared Euclidean distance from every pixel to the nearest selected pixel
+ * (`toSelected`) or to the nearest unselected pixel (otherwise), at the
+ * 50 % threshold. Exact distance transform (Felzenszwalb & Huttenlocher).
+ */
+export function distanceToSelected(mask: Uint8Array, w: number, h: number, toSelected: boolean): Float64Array {
+  const INF = 1e20;
+  const d = new Float64Array(w * h);
+  for (let i = 0; i < d.length; i++) d[i] = (mask[i] >= 128) === toSelected ? 0 : INF;
+  const n = Math.max(w, h);
+  const f = new Float64Array(n);
+  const out = new Float64Array(n);
+  const v = new Int32Array(n);
+  const z = new Float64Array(n + 1);
+  const line = (len: number) => {
+    let k = 0;
+    v[0] = 0;
+    z[0] = -INF;
+    z[1] = INF;
+    for (let q = 1; q < len; q++) {
+      let s = (f[q] + q * q - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+      while (s <= z[k]) {
+        k--;
+        s = (f[q] + q * q - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+      }
+      k++;
+      v[k] = q;
+      z[k] = s;
+      z[k + 1] = INF;
+    }
+    k = 0;
+    for (let q = 0; q < len; q++) {
+      while (z[k + 1] < q) k++;
+      out[q] = (q - v[k]) * (q - v[k]) + f[v[k]];
+    }
+  };
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) f[y] = d[y * w + x];
+    line(h);
+    for (let y = 0; y < h; y++) d[y * w + x] = out[y];
+  }
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) f[x] = d[y * w + x];
+    line(w);
+    for (let x = 0; x < w; x++) d[y * w + x] = out[x];
+  }
+  return d;
 }
 
 /**

@@ -7,10 +7,9 @@
  * - Esc cancels a selection being drawn; with nothing in progress it clears
  *   the selection (and, with no selection either, falls through to the
  *   global Esc, which deselects layers).
- * - Delete/Backspace with a region selection deletes what's inside the
- *   selection's exact shape (pixels of image layers; vector layers the
- *   selection fully covers) and clears the selection — see
- *   `Editor.deleteInPixelSelection`. The artboard size never changes.
+ * - Delete/Backspace with a region selection shows a notice instead of
+ *   deleting the selected *layers*, which would be surprising here: nothing
+ *   in the editor can delete pixels inside a region yet.
  *
  * The selection itself lives in `Editor.pixelSelection` and persists when
  * switching tools, like in Photoshop.
@@ -52,7 +51,7 @@ export abstract class RegionTool extends Tool {
       return false;
     }
     if ((e.key === 'Delete' || e.key === 'Backspace') && !this.editor.pixelSelection.isEmpty) {
-      if (!e.repeat) void this.editor.deleteInPixelSelection();
+      this.editor.notify('toast.regionDeleteUnsupported');
       return true;
     }
     return false;

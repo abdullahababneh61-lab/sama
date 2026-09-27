@@ -304,36 +304,81 @@ function RegionOptions({ marquee = false, quickSelection = false }: { marquee?: 
   return (
     <div className="sw-options__group">
       {marquee && (
-        <>
+        <span className="sw-options__cluster">
           <span className="sw-options__caption">{t('options.marqueeShape')}</span>
           {shape('rectMarquee', t('tool.rectMarquee'), <SquareDashed size={16} />, tool === 'rectMarquee', () => editor?.setTool('rectMarquee'))}
           {shape('ellipseMarquee', t('tool.ellipseMarquee'), <CircleDashed size={16} />, tool === 'ellipseMarquee', () => editor?.setTool('ellipseMarquee'))}
           {shape('singleRowColumnMarquee', t('options.singleRow'), <Rows2 size={16} />, tool === 'singleRowColumnMarquee' && orientation === 'row', rowCol('row'))}
           {shape('singleRowColumnMarquee', t('options.singleColumn'), <Columns2 size={16} />, tool === 'singleRowColumnMarquee' && orientation === 'column', rowCol('column'))}
           <span className="sw-options__sep" />
-        </>
+        </span>
       )}
       {quickSelection && (
-        <>
+        <span className="sw-options__cluster">
           <NumberField label={t('options.size')} value={size} min={1} max={500} suffix="px" width={96} onChange={(v) => editor?.updateToolOptions('quickSelection', { size: v })} />
           <span className="sw-options__sep" />
-        </>
+        </span>
       )}
-      <span className="sw-options__caption" data-testid="region-size">
-        {sel ? t('options.selectionSize', { w: Math.round(sel.width), h: Math.round(sel.height) }) : t('options.noSelection')}
+      <span className="sw-options__cluster">
+        <span className="sw-options__caption" data-testid="region-size">
+          {sel ? t('options.selectionSize', { w: Math.round(sel.width), h: Math.round(sel.height) }) : t('options.noSelection')}
+        </span>
+        <button type="button" className="sw-btn sw-btn--ghost" onClick={() => editor?.invertPixelSelection()}>
+          {t('options.invertSelection')}
+        </button>
+        <button type="button" className="sw-btn sw-btn--ghost" disabled={!sel} onClick={() => editor?.cropToPixelSelection()}>
+          {t('options.cropToSelection')}
+        </button>
+        <button type="button" className="sw-btn sw-btn--ghost" disabled={!sel} onClick={() => editor?.clearPixelSelection()}>
+          {t('menu.deselect')}
+        </button>
       </span>
-      <button type="button" className="sw-btn sw-btn--ghost" onClick={() => editor?.invertPixelSelection()}>
-        {t('options.invertSelection')}
-      </button>
-      <button type="button" className="sw-btn sw-btn--ghost" disabled={!sel} onClick={() => editor?.cropToPixelSelection()}>
-        {t('options.cropToSelection')}
-      </button>
-      <button type="button" className="sw-btn sw-btn--ghost" disabled={!sel} onClick={() => editor?.clearPixelSelection()}>
-        {t('menu.deselect')}
-      </button>
+      <span className="sw-options__cluster">
+        <span className="sw-options__sep" />
+        <button type="button" className="sw-btn sw-btn--ghost" disabled={!sel} title="Ctrl+Shift+J" onClick={() => void editor?.layerViaSelection('cut')}>
+          {t('options.cutToNewLayer')}
+        </button>
+        <button type="button" className="sw-btn sw-btn--ghost" disabled={!sel} title="Ctrl+J" onClick={() => void editor?.layerViaSelection('copy')}>
+          {t('options.copyToNewLayer')}
+        </button>
+      </span>
+      <span className="sw-options__cluster">
+        <span className="sw-options__sep" />
+        <SelectionRefine disabled={!sel} />
+      </span>
     </div>
   );
 }
+
+/** Feather / Smooth / Expand / Contract — they rewrite the shared selection mask. */
+function SelectionRefine({ disabled }: { disabled: boolean }) {
+  const editor = useEditor();
+  const t = useT();
+  const o = useWorkspace((s) => s.toolOptions.selectionRefine);
+  const set = (patch: Partial<typeof o>) => editor?.updateToolOptions('selectionRefine', patch);
+  const refine = (op: 'feather' | 'smooth' | 'expand' | 'contract', amount: number) => editor?.refinePixelSelection(op, amount);
+  return (
+    <>
+      <button type="button" className="sw-btn sw-btn--ghost" disabled={disabled} onClick={() => refine('feather', o.feather)}>
+        {t('options.feather')}
+      </button>
+      <NumberField label="" title={t('options.featherRadius')} value={o.feather} min={0.5} max={250} step={0.5} suffix="px" width={70} onChange={(v) => set({ feather: v })} />
+      <button type="button" className="sw-btn sw-btn--ghost" disabled={disabled} onClick={() => refine('smooth', SMOOTH_RADIUS)}>
+        {t('options.smooth')}
+      </button>
+      <button type="button" className="sw-btn sw-btn--ghost" disabled={disabled} onClick={() => refine('expand', o.amount)}>
+        {t('options.expand')}
+      </button>
+      <button type="button" className="sw-btn sw-btn--ghost" disabled={disabled} onClick={() => refine('contract', o.amount)}>
+        {t('options.contract')}
+      </button>
+      <NumberField label="" title={t('options.modifyAmount')} value={o.amount} min={1} max={500} step={1} suffix="px" width={70} onChange={(v) => set({ amount: Math.round(v) })} />
+    </>
+  );
+}
+
+/** Smooth's sample radius (artboard px): removes jaggies and specks up to this size. */
+const SMOOTH_RADIUS = 2;
 
 function MagicWandOptions() {
   const editor = useEditor();

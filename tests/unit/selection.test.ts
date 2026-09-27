@@ -22,7 +22,6 @@ import { boxCoverage } from '../../src/editor/tools/ObjectSelectionTool';
 import { colorDistance, layerColor, similarLayers } from '../../src/editor/tools/MagicWandTool';
 import { resized } from '../../src/editor/tools/ArtboardTool';
 import { polygonArea } from '../../src/editor/tools/LassoTool';
-import { classifyCoverage } from '../../src/editor/selectionDelete';
 
 const sum = (m: Uint8Array) => m.reduce((a, b) => a + b, 0);
 
@@ -252,27 +251,69 @@ describe('magic wand', () => {
   });
 });
 
-describe('delete inside a selection: vector coverage', () => {
-  // 4×1 strip: alpha per pixel.
-  const rgba = (alphas: number[]) => {
-    const d = new Uint8ClampedArray(alphas.length * 4);
-    alphas.forEach((a, i) => (d[i * 4 + 3] = a));
-    return d;
+describe('selection refinement (soft 0–255 mask)', () => {
+  const rectSel = (w = 100, h = 100, r = { x: 30, y: 30, w: 40, h: 20 }) => {
+    const s = new PixelSelection();
+    s.fit(w, h);
+    s.combine({ type: 'rect', ...r }, 'replace');
+    return s;
   };
-  it('full when every solid pixel is selected (soft edges ignored)', () => {
-    expect(classifyCoverage(rgba([0, 255, 255, 60]), new Uint8Array([0, 1, 1, 0]), false)).toBe('full');
+  it('stores 255 for selected pixels; subtract/invert keep soft values consistent', () => {
+    const s = rectSel();
+    expect(s.getMask()[40 * 100 + 40]).toBe(255);
+    s.feather(4);
+    const soft = s.getMask();
+    s.invert();
+    const inv = s.getMask();
+    for (let i = 0; i < soft.length; i++) expect(soft[i] + inv[i]).toBe(255);
   });
-  it('partial when a solid pixel is outside the selection', () => {
-    expect(classifyCoverage(rgba([255, 255, 255, 0]), new Uint8Array([0, 1, 1, 0]), false)).toBe('partial');
+  it('expands and contracts by exact distances, rounding convex corners', () => {
+    const s = rectSel();
+    s.expand(5);
+    expect(s.bounds()).toEqual({ x: 25, y: 25, width: 50, height: 30 });
+    expect(s.contains(25.5, 25.5)).toBe(false); // corner is rounded
+    expect(s.contains(50, 25.5)).toBe(true);
+    s.contract(5);
+    expect(s.bounds()).toEqual({ x: 30, y: 30, width: 40, height: 20 });
+    s.contract(20); // thinner than 2×20: gone
+    expect(s.isEmpty).toBe(true);
   });
-  it('none when no pixel of the layer is selected', () => {
-    expect(classifyCoverage(rgba([255, 255, 0, 0]), new Uint8Array([0, 0, 1, 1]), false)).toBe('none');
+  it('does not contract from the artboard border', () => {
+    const s = rectSel(100, 100, { x: 0, y: 0, w: 50, h: 100 });
+    s.contract(5);
+    expect(s.bounds()).toEqual({ x: 0, y: 0, width: 45, height: 100 });
   });
-  it('hairlines (no solid pixel) use half-covered pixels', () => {
-    expect(classifyCoverage(rgba([0, 140, 200, 0]), new Uint8Array([0, 1, 1, 0]), false)).toBe('full');
-    expect(classifyCoverage(rgba([0, 140, 200, 0]), new Uint8Array([0, 1, 0, 0]), false)).toBe('partial');
+  it('smooth fills small notches and removes specks', () => {
+    const s = rectSel();
+    s.combine({ type: 'rect', x: 45, y: 30, w: 1, h: 2 }, 'subtract');
+    s.combine({ type: 'rect', x: 90, y: 90, w: 2, h: 2 }, 'add');
+    s.smooth(2);
+    expect(s.contains(45.5, 30.5)).toBe(true);
+    expect(s.contains(90.5, 90.5)).toBe(false);
+    expect(s.bounds()).toEqual({ x: 30, y: 30, width: 40, height: 20 });
   });
-  it('a layer reaching beyond the artboard is never fully covered', () => {
-    expect(classifyCoverage(rgba([255, 255, 255, 255]), new Uint8Array([1, 1, 1, 1]), true)).toBe('partial');
+  it('feather softens the edge symmetrically and keeps the 50 % outline in place', () => {
+    const s = rectSel();
+    const before = s.pixelCount;
+    s.feather(4);
+    const m = s.getMask();
+    const row = 40 * 100;
+    expect(m[row + 25]).toBeLessThan(40); // outside, near the edge
+    expect(m[row + 29]).toBeGreaterThan(40);
+    expect(m[row + 29]).toBeLessThan(255);
+    expect(m[row + 50]).toBe(255); // deep inside
+    expect(Math.abs(s.pixelCount - before)).toBeLessThan(before * 0.08);
+    const b = s.bounds()!;
+    expect(b.x).toBeLessThan(30); // soft pixels reach beyond the old edge
+  });
+  it('quick-select style add/subtract with a 0–255 mask', () => {
+    const s = rectSel();
+    const add = new Uint8Array(100 * 100);
+    add[5 * 100 + 5] = 255;
+    s.combineMask(add, 'add');
+    expect(s.contains(5.5, 5.5)).toBe(true);
+    s.combineMask(add, 'subtract');
+    expect(s.contains(5.5, 5.5)).toBe(false);
+    expect(s.contains(40, 40)).toBe(true);
   });
 });

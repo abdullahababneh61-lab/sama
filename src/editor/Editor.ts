@@ -112,13 +112,7 @@ import { GroupSelectionTool } from './tools/GroupSelectionTool';
 import { PixelSelection, type CombineMode, type SelectionShape } from './pixelSelection';
 import { SelectionAnts } from './SelectionAnts';
 import { renderArtboardPixels, type ScenePixels } from './scenePixels';
-import {
-  classifyCoverage,
-  eraseImagePixels,
-  renderLayerAlone,
-  selectionMaskCanvas,
-  withOffscreenRendering,
-} from './selectionDelete';
+import { applySelectionToImage, selectionAlphaCanvas, withOffscreenRendering } from './selectionLayers';
 import {
   ARTBOARD_LABEL_FONT,
   PASTEBOARD_COLOR,
@@ -977,99 +971,124 @@ export class Editor {
     return withOffscreenRendering(this.canvas, () => renderArtboardPixels(this.canvas.getObjects(), this.doc, width, height));
   }
 
-  private deletingInSelection = false;
+  /**
+   * Refines the region selection in place (amounts in artboard pixels):
+   * Feather softens its edge, Smooth rounds off jagged bits, Expand/Contract
+   * grow or shrink it. Everything that uses the selection sees the result.
+   */
+  refinePixelSelection(op: 'feather' | 'smooth' | 'expand' | 'contract', amount: number) {
+    if (this.pixelSelection.isEmpty) return;
+    this.pixelSelection[op](amount);
+    this.publishPixelSelection();
+  }
+
+  private layerViaBusy = false;
 
   /**
-   * Delete/Backspace with a region selection: removes the content inside the
-   * selection's exact shape, on every visible, unlocked layer under it,
-   * without changing the artboard. One undoable step; the selection is
-   * cleared afterwards.
+   * "Copy to New Layer" (Ctrl+J) / "Cut to New Layer" (Shift+Ctrl+J), like
+   * Photoshop's Layer via Copy / Layer via Cut: the pixels inside the region
+   * selection's exact shape go to a new image layer directly above the
+   * original, transparent everywhere else; a cut also removes them from the
+   * original. The new layer becomes the selected layer, the region selection
+   * is cleared, and it's one undoable step.
    *
-   * - Image layers: the selected pixels become transparent.
-   * - Vector layers (shapes, paths, text, brush strokes): deleted when the
-   *   selection covers the whole layer. A vector layer only partly inside
-   *   is left unchanged — cutting part of a vector would need boolean path
-   *   operations, which the editor doesn't have yet — and a notice says so.
-   *
-   * Resolves to what happened, or null when there was no selection.
+   * Works on image layers: the selected layer, or — with no layer selected —
+   * the top-most visible, unlocked image with pixels inside the selection.
+   * The new layer keeps the original's size, position, transform, opacity,
+   * blend mode and masks (it's a copy of the layer with new pixels).
+   * Resolves to the new layer, or null when nothing could be copied.
    */
-  async deleteInPixelSelection(): Promise<{ imagesChanged: number; vectorsDeleted: number; vectorsPartial: number } | null> {
+  async layerViaSelection(mode: 'copy' | 'cut'): Promise<FabricObject | null> {
     const sel = this.pixelSelection;
-    if (sel.isEmpty || this.deletingInSelection) return null;
-    this.deletingInSelection = true;
+    if (sel.isEmpty) {
+      this.notify('toast.layerViaNoSelection', 'warning');
+      return null;
+    }
+    if (this.layerViaBusy) return null;
+    this.layerViaBusy = true;
     try {
-      sel.fit(this.doc.width, this.doc.height);
       this.exitTextEditing();
       this.stopPathEditing();
-      const mask = sel.getMask();
-      const maskCanvas = selectionMaskCanvas(sel);
-      const { width: docW, height: docH } = this.doc;
-      const images: FabricImage[] = [];
-      const vectors: FabricObject[] = [];
-      walkLayers(this.canvas.getObjects(), (o) => {
-        if (!isEffectivelyVisible(o) || isEffectivelyLocked(o)) return;
-        if (o instanceof FabricImage) images.push(o);
-        // Paint layers: each brush stroke is its own path.
-        else if (o instanceof PaintLayer) vectors.push(...o.getObjects().filter((stroke) => stroke.visible));
-        else if (!(o instanceof Group)) vectors.push(o); // other groups: their children are visited
-      });
-
-      // Vectors: fully covered → delete; partly covered → report.
-      const toDelete: FabricObject[] = [];
-      let vectorsPartial = 0;
-      for (const o of vectors) {
-        o.setCoords();
-        const r = o.getBoundingRect();
-        const outside = r.left < -0.5 || r.top < -0.5 || r.left + r.width > docW + 0.5 || r.top + r.height > docH + 0.5;
-        const coverage = classifyCoverage(renderLayerAlone(o, sel.width, sel.height, sel.scale), mask, outside);
-        if (coverage === 'full') toDelete.push(o);
-        else if (coverage === 'partial') vectorsPartial++;
+      sel.fit(this.doc.width, this.doc.height);
+      const usable = (o: FabricObject): o is FabricImage => o instanceof FabricImage && isEffectivelyVisible(o) && !isEffectivelyLocked(o);
+      const active = this.canvas.getActiveObjects();
+      let candidates: FabricImage[];
+      if (active.length) {
+        candidates = active.filter(usable).reverse(); // top-most first
+        if (!candidates.length) {
+          this.notify('toast.layerViaNeedsImage', 'warning');
+          return null;
+        }
+      } else {
+        const all: FabricImage[] = [];
+        walkLayers(this.canvas.getObjects(), (o) => {
+          if (usable(o)) all.push(o);
+        });
+        candidates = all.reverse(); // walkLayers goes bottom to top
       }
-
-      // Images: erase the selected pixels (compute all first, then swap in).
-      const edits: { img: FabricImage; pixels: HTMLCanvasElement }[] = [];
-      for (const img of images) {
-        const pixels = eraseImagePixels(img, maskCanvas, sel.scale);
-        if (pixels) edits.push({ img, pixels });
-      }
-
-      if (!edits.length && !toDelete.length) {
-        this.notify(vectorsPartial ? 'toast.selectionDeletePartialVectors' : 'toast.selectionDeleteNothing', 'warning');
-        return { imagesChanged: 0, vectorsDeleted: 0, vectorsPartial };
-      }
-
+      // Leave any multi-selection first so layers are back in their own coordinates.
       this.canvas.discardActiveObject();
-      for (const { img, pixels } of edits) {
+      const selection = selectionAlphaCanvas(sel);
+      let target: FabricImage | null = null;
+      let copied: HTMLCanvasElement | null = null;
+      for (const img of candidates) {
+        copied = applySelectionToImage(img, selection, sel.scale, 'keep');
+        if (copied) {
+          target = img;
+          break;
+        }
+      }
+      if (!target || !copied) {
+        this.handleSelectionChange();
+        this.notify(candidates.length ? 'toast.layerViaEmpty' : 'toast.layerViaNeedsImage', 'warning');
+        return null;
+      }
+
+      const name = target.samaName ?? kindLabel('image');
+      const toAsset = async (pixels: HTMLCanvasElement) => {
         const blob = await new Promise<Blob>((resolve, reject) =>
           pixels.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not encode the image'))), 'image/png'),
         );
-        const asset = await this.assets.add(blob, img.samaFileName ?? `${img.samaName ?? 'image'}.png`);
-        // setSrc resets the size to the new source; keep the layer's geometry.
+        return this.assets.add(blob, target!.samaFileName ?? `${name}.png`);
+      };
+      /** Points an image layer at new pixels, keeping its geometry. */
+      const swapPixels = async (img: FabricImage, asset: { id: string; url: string }) => {
         const { width, height, cropX, cropY } = img;
         await img.setSrc(asset.url);
         img.set({ width, height, cropX, cropY, dirty: true });
         img.samaAssetId = asset.id;
-        for (let p = img.parent as Group | undefined; p; p = p.parent as Group | undefined) p.set('dirty', true);
+      };
+
+      // The new layer: a copy of the original layer (same geometry, opacity,
+      // blend mode, masks…) holding only the selected pixels.
+      const parent = (target.parent as Group | undefined) ?? null;
+      const json = (parent ? target.toObject() : serializeObject(this.canvas, target)) as Record<string, unknown>;
+      const [layer] = (await enlivenObjects([json])) as FabricImage[];
+      reassignIds(layer);
+      await swapPixels(layer, await toAsset(copied));
+      layer.samaName = this.translate(mode === 'cut' ? 'layerName.cut' : 'layerName.copy', { name });
+      layer.samaLocked = false;
+      layer.visible = true;
+      // In a group, the copied geometry is in the group's plane; insertAt expects scene coordinates.
+      if (parent) util.applyTransformToObject(layer, util.multiplyTransformMatrices(parent.calcTransformMatrix(), layer.calcOwnMatrix()));
+      applyLockState(layer);
+
+      if (mode === 'cut') {
+        const remaining = applySelectionToImage(target, selection, sel.scale, 'remove');
+        if (remaining) await swapPixels(target, await toAsset(remaining));
       }
-      for (const o of toDelete) {
-        const parent = o.parent as Group | undefined;
-        this.removeFromParent(o);
-        // Groups and paint layers left empty go too.
-        for (let g = parent; g && g.getObjects().length === 0; ) {
-          const up = g.parent as Group | undefined;
-          this.removeFromParent(g);
-          g = up;
-        }
-      }
+      this.insertInto(parent, this.siblingsOf(target).indexOf(target) + 1, layer);
+      layer.setCoords();
+      for (let p = parent; p; p = (p.parent as Group | undefined) ?? null) p.set('dirty', true);
+
       this.pixelSelection.clear();
       this.publishPixelSelection();
-      this.handleSelectionChange();
+      this.selectObjects([layer]);
       this.canvas.requestRenderAll();
-      this.commit('Delete selection');
-      if (vectorsPartial) this.notify('toast.selectionDeletePartialVectors', 'warning');
-      return { imagesChanged: edits.length, vectorsDeleted: toDelete.length, vectorsPartial };
+      this.commit(mode === 'cut' ? 'Cut to new layer' : 'Copy to new layer');
+      return layer;
     } finally {
-      this.deletingInSelection = false;
+      this.layerViaBusy = false;
     }
   }
 
@@ -2480,8 +2499,16 @@ export class Editor {
         case 'x':
           this.cutSelection();
           return true;
-        case 'd':
         case 'j':
+          // With a region selection: Copy to New Layer (Ctrl+J) / Cut to New
+          // Layer (Shift+Ctrl+J), like Photoshop. Without one: duplicate.
+          if (!this.pixelSelection.isEmpty) {
+            void this.layerViaSelection(e.shiftKey ? 'cut' : 'copy');
+            return true;
+          }
+          void this.duplicateSelection();
+          return true;
+        case 'd':
           void this.duplicateSelection();
           return true;
         case 'g':

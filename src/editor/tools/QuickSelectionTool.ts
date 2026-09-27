@@ -129,8 +129,9 @@ export class QuickSelectionTool extends RegionTool {
     const out = this.base.slice();
     const stroke = this.stroke;
     const flooded = this.flooded;
-    if (this.subtract) for (let k = 0; k < out.length; k++) out[k] &= (stroke[k] | flooded[k]) ^ 1;
-    else for (let k = 0; k < out.length; k++) out[k] |= stroke[k] | flooded[k];
+    // `base` holds selection values 0–255; the stroke's own marks are 0/1.
+    if (this.subtract) for (let k = 0; k < out.length; k++) out[k] = stroke[k] | flooded[k] ? 0 : out[k];
+    else for (let k = 0; k < out.length; k++) out[k] = stroke[k] | flooded[k] ? 255 : out[k];
     this.editor.setRegionMask(out);
   }
 }

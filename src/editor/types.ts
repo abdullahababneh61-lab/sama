@@ -174,6 +174,13 @@ export interface MagicWandOptions {
   contiguous: boolean;
 }
 
+/** Amounts for the selection refinements (artboard pixels). */
+export interface SelectionRefineOptions {
+  feather: number;
+  /** Expand/Contract distance. */
+  amount: number;
+}
+
 export interface ToolOptions {
   brush: BrushOptions;
   eraser: EraserOptions;
@@ -185,6 +192,7 @@ export interface ToolOptions {
   singleRowColumnMarquee: SingleRowColumnOptions;
   quickSelection: QuickSelectionOptions;
   magicWand: MagicWandOptions;
+  selectionRefine: SelectionRefineOptions;
 }
 
 /**
